@@ -1,0 +1,132 @@
+{
+  "info": {
+    "name": "Pryve Auth API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Auth flows: register, verify OTP, set/reset password, login, me, change password, update profile, and Google social login."
+  },
+  "item": [
+    {
+      "name": "Register (Create User)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/api/v1/users/create", "host": ["{{baseUrl}}"], "path": ["api","v1","users","create"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"user@example.com\",\n  \"fullName\": \"Test User\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Verify OTP",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/api/v1/users/verify-otp", "host": ["{{baseUrl}}"], "path": ["api","v1","users","verify-otp"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"user@example.com\",\n  \"otp\": 123456\n}"
+        }
+      }
+    },
+    {
+      "name": "Resend OTP",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/api/v1/users/resend-otp", "host": ["{{baseUrl}}"], "path": ["api","v1","users","resend-otp"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"user@example.com\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Set/Reset Password (with OTP)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/api/v1/users/update-password", "host": ["{{baseUrl}}"], "path": ["api","v1","users","update-password"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"user@example.com\",\n  \"userId\": \"<fill-from-verify-token-or-db>\",\n  \"otp\": 123456,\n  \"newPassword\": \"Secret123\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Login",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/api/v1/users/login", "host": ["{{baseUrl}}"], "path": ["api","v1","users","login"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"Secret123\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Forgot Password (send OTP)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/api/v1/users/forgot-password", "host": ["{{baseUrl}}"], "path": ["api","v1","users","forgot-password"] },
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"user@example.com\"\n}" }
+      }
+    },
+    {
+      "name": "Me (User by token)",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+        "url": { "raw": "{{baseUrl}}/api/v1/users/user-by-token", "host": ["{{baseUrl}}"], "path": ["api","v1","users","user-by-token"] }
+      }
+    },
+    {
+      "name": "Change Password (auth)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "url": { "raw": "{{baseUrl}}/api/v1/users/change-password", "host": ["{{baseUrl}}"], "path": ["api","v1","users","change-password"] },
+        "body": { "mode": "raw", "raw": "{\n  \"oldPassword\": \"Secret123\",\n  \"newPassword\": \"NewSecret123\"\n}" }
+      }
+    },
+    {
+      "name": "Update Profile (auth)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "url": { "raw": "{{baseUrl}}/api/v1/users/update-profile/{{userId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","users","update-profile","{{userId}}"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"fullName\": \"Updated Name\",\n  \"userName\": \"updated_username\",\n  \"profilePhoto\": \"https://example.com/photo.jpg\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Google Social Login",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/api/v1/users/social-login", "host": ["{{baseUrl}}"], "path": ["api","v1","users","social-login"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"user@example.com\",\n  \"provider\": \"GOOGLE\",\n  \"providerId\": \"google-oauth-sub\",\n  \"userName\": \"user\",\n  \"firstName\": \"First\",\n  \"lastName\": \"Last\",\n  \"profilePhoto\": \"https://example.com/avatar.jpg\"\n}"
+        }
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "token", "value": "" },
+    { "key": "userId", "value": "" }
+  ]
+}
+
+
