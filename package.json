@@ -11,6 +11,7 @@
     "clean": "rm -rf node_modules && npm install",
     "test": "echo \"No tests specified\" && exit 0",
     "db:generate": "prisma generate",
+    "db:generate-safe": "node scripts/generate-prisma.js",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",

@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,35 +8,37 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Basic user information
-  fullName        String?
-  profilePhoto    String? @default("default-profile.png")
-  email           String  @unique
-  password        String?
-  role            Role    @default(CLIENT)
-  status          Status  @default(ACTIVE)
+  id           String    @id @default(cuid())
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  fullName     String?
+  profilePhoto String?   @default("default-profile.png")
+  email        String    @unique
+  password     String?
+  role         Role      @default(CLIENT)
+  status       Status    @default(ACTIVE)
+  otp          String?
+  otpCreatedAt DateTime  @default(now())
+  userName     String?   @unique
+  loginType    LoginType @default(EMAIL)
+  firstName    String?
+  lastName     String?
   
-  // OTP fields
-  otp            String?
-  otpCreatedAt   DateTime @default(now())
+  // Additional profile fields
+  gender       Gender?
+  dateOfBirth  DateTime?
+  country      String?
+  region       String?
   
-  // Social login fields
-  userName       String? @unique
-  loginType      LoginType @default(EMAIL)
+  // Test field to demonstrate auto-sync
+  phoneNumber  String?
   
-  // Name fields
-  firstName      String?
-  lastName       String?
-  
+  // New field for testing update functionality
+  bio          String?
 
   @@map("users")
 }
 
-// Enums
 enum Role {
   ADMIN
   CLIENT
@@ -57,3 +56,9 @@ enum LoginType {
   FACEBOOK
 }
 
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}

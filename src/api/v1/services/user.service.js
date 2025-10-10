@@ -513,7 +513,14 @@ class UserService {
         email,
         firstName,
         lastName,
-        fullName
+        fullName,
+        // Additional profile fields
+        gender,
+        dateOfBirth,
+        country,
+        region,
+        phoneNumber,
+        bio
       } = data;
 
       const userToUpdate = await prisma.user.findUnique({ where: { id: userId } });
@@ -568,6 +575,14 @@ class UserService {
       if (firstName !== undefined) updates.firstName = firstName;
       if (lastName !== undefined) updates.lastName = lastName;
       if (fullName !== undefined) updates.fullName = fullName;
+
+      // Additional profile fields
+      if (gender !== undefined) updates.gender = gender;
+      if (dateOfBirth !== undefined) updates.dateOfBirth = dateOfBirth;
+      if (country !== undefined) updates.country = country;
+      if (region !== undefined) updates.region = region;
+      if (phoneNumber !== undefined) updates.phoneNumber = phoneNumber;
+      if (bio !== undefined) updates.bio = bio;
 
       if (Object.keys(updates).length > 0) {
         const updatedUser = await prisma.user.update({

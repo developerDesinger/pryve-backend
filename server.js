@@ -5,6 +5,7 @@ const prisma = require("./src/lib/prisma");
 
 const socketIo = require('socket.io');
 const seedDatabaseAndCreateSuperAdmin = require("./src/api/v1/utils/superAdminCreation");
+const { syncDatabaseSchema, generatePrismaClient } = require("./src/utils/databaseSync");
 
 process.on("uncaughtException", (err) => {
   console.error("Uncaught Exception:", err.name, err.message);
@@ -19,6 +20,12 @@ async function connectDatabase() {
   try {
     await prisma.$connect();
     console.log("PostgreSQL connected successfully!");
+    
+    // Auto-sync database schema (adds new fields without losing data)
+    await syncDatabaseSchema();
+    
+    // Generate Prisma client after schema sync
+    await generatePrismaClient();
     
     // Seed database and create super admin
     await seedDatabaseAndCreateSuperAdmin();
