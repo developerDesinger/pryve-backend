@@ -14,12 +14,13 @@ class UserService {
 
     // Check if user already exists
     let user = await prisma.user.findUnique({ where: { email } });
-    
+
     // If user exists and is active, return error
     if (user && user.status === "ACTIVE") {
       return {
+        user,
         message: "User with this email already exists and is active.",
-        success: false,
+        success: true,
       };
     }
 
@@ -167,7 +168,7 @@ class UserService {
         success: false,
       };
     }
-    const user = await prisma.user.findUnique({ 
+    const user = await prisma.user.findUnique({
       where: { email },
       select: {
         id: true,
@@ -437,37 +438,27 @@ class UserService {
   }
 
   static async updatePassword(data) {
-    const { email, userId, otp, newPassword } = data;
+    const { email, userId, newPassword } = data;
 
     if (!newPassword) {
       throw new AppError("New password is required.", 400);
     }
 
-    const user = await prisma.user.findFirst({ 
-      where: { 
-        id: userId, 
-        email 
-      } 
+    const user = await prisma.user.findFirst({
+      where: {
+        id: userId,
+        email
+      }
     });
     if (!user) {
       throw new AppError("User not found.", HttpStatusCodes.BAD_REQUEST);
-    }
-
-    if (user.otp !== otp.toString()) {
-      throw new AppError("Invalid OTP.", HttpStatusCodes.BAD_REQUEST);
-    }
-
-    const otpExpiryTime = 10 * 60 * 1000;
-    if (Date.now() - user.otpCreatedAt.getTime() > otpExpiryTime) {
-      throw new AppError("OTP has expired.", HttpStatusCodes.BAD_REQUEST);
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: {
-        password: hashedPassword,
-        otp: null
+        password: hashedPassword
       }
     });
 
@@ -478,7 +469,7 @@ class UserService {
     if (!oldPassword || !newPassword) {
       throw new AppError("Old and new passwords are required.", 400);
     }
-    const user = await prisma.user.findUnique({ 
+    const user = await prisma.user.findUnique({
       where: { id: userId },
       select: {
         id: true,
@@ -509,7 +500,7 @@ class UserService {
     };
   }
 
-  
+
 
   static async updateProfile(userId, data) {
     try {
