@@ -1,27 +1,21 @@
 const nodemailer = require("nodemailer");
-const sgMail = require("@sendgrid/mail");
-require("dotenv").config(); // Load environment variables
+require("dotenv").config();
 
-// Set SendGrid API Key as fallback
-if (process.env.SENDGRID_API_KEY) {
-  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-}
-
-// Create SMTP transporter for Office365
+// Create Office365 SMTP transporter
 const createTransporter = () => {
   const config = {
-    host: process.env.SMTP_HOST || "smtp.office365.com",
-    port: process.env.SMTP_PORT || 587,
+    host: "smtp.office365.com",
+    port: 587,
     secure: false, // STARTTLS
     auth: {
-      user: process.env.SMTP_USERNAME || "contact@pryvegroup.com",
-      pass: process.env.SMTP_PASSWORD || "Pryvemvp1!"
+      user: process.env.SMTP_USERNAME,
+      pass: process.env.SMTP_PASSWORD
     },
     requireTLS: true,
-    name: "mail.pryvegroup.com" // optional but good to include
+    name: "mail.pryvegroup.com"
   };
 
-  console.log(`🔧 [SMTP CONFIG] Creating transporter with config:`, {
+  console.log(`🔧 [OFFICE365] Creating transporter with config:`, {
     host: config.host,
     port: config.port,
     secure: config.secure,
@@ -32,109 +26,25 @@ const createTransporter = () => {
   return nodemailer.createTransport(config);
 };
 
-// Multiple SMTP configurations to try
-const getSMTPConfigs = () => {
-  return [
-    // Office365 Configuration 1 - Primary
-    {
-      name: "Office365 SMTP (smtp.office365.com:587)",
-      host: process.env.SMTP_HOST || "smtp.office365.com",
-      port: 587,
-      secure: false, // STARTTLS
-      auth: {
-        user: process.env.SMTP_USERNAME || "contact@pryvegroup.com",
-        pass: process.env.SMTP_PASSWORD || "Pryvemvp1!"
-      },
-      requireTLS: true,
-      name: "mail.pryvegroup.com"
-    },
-    // Office365 Configuration 2 - Port 465 with SSL
-    {
-      name: "Office365 SMTP (smtp.office365.com:465)",
-      host: "smtp.office365.com",
-      port: 465,
-      secure: true,
-      auth: {
-        user: process.env.SMTP_USERNAME || "contact@pryvegroup.com",
-        pass: process.env.SMTP_PASSWORD || "Pryvemvp1!"
-      },
-      name: "mail.pryvegroup.com"
-    },
-    // GoDaddy Configuration - Fallback
-    {
-      name: "GoDaddy SMTP (smtpout.secureserver.net:587)",
-      host: "smtpout.secureserver.net",
-      port: 587,
-      secure: false,
-      auth: {
-        user: process.env.SMTP_USERNAME || "contact@pryvegroup.com",
-        pass: process.env.SMTP_PASSWORD || "Pryvemvp1!"
-      },
-      name: 'mail.pryvegroup.com'
-    },
-    // Gmail Configuration (if provided)
-    ...(process.env.GMAIL_USERNAME ? [{
-      name: "Gmail SMTP",
-      host: "smtp.gmail.com",
-      port: 587,
-      secure: false,
-      auth: {
-        user: process.env.GMAIL_USERNAME,
-        pass: process.env.GMAIL_PASSWORD
-      }
-    }] : [])
-  ];
-};
-
-// Try multiple SMTP configurations
-const sendEmailWithMultipleConfigs = async (mailOptions) => {
-  const configs = getSMTPConfigs();
-  
-  for (let i = 0; i < configs.length; i++) {
-    const config = configs[i];
-    console.log(`🔄 [EMAIL FALLBACK] Trying configuration ${i + 1}/${configs.length}: ${config.name}`);
+// Send email using Office365
+const sendEmailWithOffice365 = async (mailOptions) => {
+  try {
+    const transporter = createTransporter();
     
-    try {
-      const transporter = nodemailer.createTransport(config);
-      
-      // Verify connection
-      console.log(`🔍 [EMAIL FALLBACK] Verifying connection for ${config.name}...`);
-      await transporter.verify();
-      console.log(`✅ [EMAIL FALLBACK] Connection verified for ${config.name}`);
-      
-      // Send email
-      const info = await transporter.sendMail(mailOptions);
-      console.log(`✅ [EMAIL FALLBACK] Email sent successfully via ${config.name}`);
-      console.log(`📧 [EMAIL FALLBACK] Message ID: ${info.messageId}`);
-      return true;
-      
-    } catch (error) {
-      console.log(`❌ [EMAIL FALLBACK] ${config.name} failed:`, error.message);
-      
-      // If this is the last config and we have SendGrid, try SendGrid
-      if (i === configs.length - 1) {
-        console.log(`🔄 [EMAIL FALLBACK] All SMTP configs failed, trying SendGrid...`);
-        
-        if (process.env.SENDGRID_API_KEY) {
-          try {
-            const response = await sgMail.send({
-              to: mailOptions.to,
-              from: mailOptions.from,
-              subject: mailOptions.subject,
-              html: mailOptions.html
-            });
-            console.log(`✅ [EMAIL FALLBACK] Email sent via SendGrid`);
-            console.log(`📧 [EMAIL FALLBACK] SendGrid Status: ${response[0].statusCode}`);
-            return true;
-          } catch (sendgridError) {
-            console.error(`❌ [EMAIL FALLBACK] SendGrid also failed:`, sendgridError.message);
-            throw new Error(`All email methods failed. Last error: ${error.message}`);
-          }
-        } else {
-          throw new Error(`All SMTP configurations failed. Last error: ${error.message}`);
-        }
-      }
-    }
+    // Verify connection
+    console.log(`🔍 [OFFICE365] Verifying connection...`);
+    await transporter.verify();
+    console.log(`✅ [OFFICE365] Connection verified successfully`);
+    
+    // Send email
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`✅ [OFFICE365] Email sent successfully`);
+    console.log(`📧 [OFFICE365] Message ID: ${info.messageId}`);
+    return true;
+    
+  } catch (error) {
+    console.error(`❌ [OFFICE365] Email sending failed:`, error.message);
+    throw new Error(`Office365 email failed: ${error.message}`);
   }
 };
 
@@ -194,7 +104,7 @@ const sendEmail = async (options) => {
   });
 
   try {
-    await sendEmailWithMultipleConfigs(mailOptions);
+    await sendEmailWithOffice365(mailOptions);
     console.log(`✅ [SEND EMAIL] Email sent successfully to: ${options.email}`);
   } catch (error) {
     console.error(`❌ [SEND EMAIL] Error sending email:`);
@@ -258,7 +168,7 @@ const sendForgotPasswordEmail = async (options) => {
   });
 
   try {
-    await sendEmailWithMultipleConfigs(mailOptions);
+    await sendEmailWithOffice365(mailOptions);
     console.log(`✅ [FORGOT PASSWORD] Forgot password email sent successfully to: ${options.email}`);
   } catch (error) {
     console.error(`❌ [FORGOT PASSWORD] Error sending forgot password email:`);
@@ -268,5 +178,3 @@ const sendForgotPasswordEmail = async (options) => {
 };
 
 module.exports = { sendEmail, sendForgotPasswordEmail };
-
-// module.exports = sendEmail;
