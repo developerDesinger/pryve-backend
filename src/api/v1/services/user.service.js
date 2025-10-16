@@ -24,7 +24,10 @@ class UserService {
       };
     }
 
-    let otp = "123456"; // Replace with real OTP in production
+    // Generate a 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    console.log(`🔐 [CREATE USER] Generated OTP for ${email}: ${otp}`);
 
     if (user) {
       // User exists but is inactive - resend OTP
@@ -50,6 +53,21 @@ class UserService {
           otpCreatedAt: new Date(),
         }
       });
+    }
+
+    // Send OTP email
+    try {
+      console.log(`📧 [CREATE USER] Sending OTP email to: ${email}`);
+      await sendEmail({
+        email: email,
+        otp: otp,
+        subject: "Verify Your Email - Pryve"
+      });
+      console.log(`✅ [CREATE USER] OTP email sent successfully to: ${email}`);
+    } catch (emailError) {
+      console.error(`❌ [CREATE USER] Failed to send OTP email to ${email}:`, emailError.message);
+      // Don't throw error here - user is created, just email failed
+      // You might want to implement a retry mechanism or queue for failed emails
     }
 
     return {
@@ -136,27 +154,68 @@ class UserService {
   static async resendOtp(data) {
     const { email } = data;
 
+    console.log(`🔄 [RESEND OTP] Resending OTP for email: ${email}`);
+
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
       throw new AppError("User not found.", HttpStatusCodes.BAD_REQUEST);
     }
 
-    // const otp = crypto.randomInt(100000, 999999).toString();
-    const otp = "123456";
+    // Check if user is already active
+    if (user.status === "ACTIVE") {
+      return {
+        message: "User is already verified and active. No need to resend OTP.",
+        success: true,
+        user: {
+          id: user.id,
+          email: user.email,
+          fullName: user.fullName,
+          status: user.status
+        }
+      };
+    }
 
-    await prisma.user.update({
+    // Check if user is inactive (needs verification)
+    if (user.status !== "INACTIVE") {
+      throw new AppError("User account is not in a state that requires OTP verification.", HttpStatusCodes.BAD_REQUEST);
+    }
+
+    // Generate a 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    console.log(`🔐 [RESEND OTP] Generated new OTP for ${email}: ${otp}`);
+
+    // Update user with new OTP
+    const updatedUser = await prisma.user.update({
       where: { id: user.id },
       data: {
         otp,
         otpCreatedAt: new Date()
       }
     });
-    // await sendEmail({ email, otp });
-    // sendOtpEmail(user.email, otp);
+
+    // Send OTP email
+    try {
+      console.log(`📧 [RESEND OTP] Sending OTP email to: ${email}`);
+      await sendEmail({
+        email: email,
+        otp: otp,
+        subject: "Your Verification Code - Pryve"
+      });
+      console.log(`✅ [RESEND OTP] OTP email sent successfully to: ${email}`);
+    } catch (emailError) {
+      console.error(`❌ [RESEND OTP] Failed to send OTP email to ${email}:`, emailError.message);
+      throw new AppError("Failed to send OTP email. Please try again.", HttpStatusCodes.INTERNAL_SERVER_ERROR);
+    }
 
     return {
       message: "OTP has been resent successfully. Please check your email.",
       success: true,
+      user: {
+        id: updatedUser.id,
+        email: updatedUser.email,
+        fullName: updatedUser.fullName,
+        status: updatedUser.status
+      }
     };
   }
 
@@ -412,13 +471,17 @@ class UserService {
   static async forgotPassword(data) {
     const { email } = data;
 
+    console.log(`🔐 [FORGOT PASSWORD] Processing forgot password for email: ${email}`);
+
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
       throw new AppError("User not found.", HttpStatusCodes.NOT_FOUND);
     }
 
-    // const otp = crypto.randomInt(100000, 999999).toString();
-    const otp = "123456";
+    // Generate a 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    console.log(`🔐 [FORGOT PASSWORD] Generated OTP for ${email}: ${otp}`);
+
     await prisma.user.update({
       where: { id: user.id },
       data: {
@@ -426,8 +489,20 @@ class UserService {
         otpCreatedAt: new Date()
       }
     });
-    // await sendForgotPasswordEmail({ email, otp });
-    // sendOtpEmail(user.email, otp);
+
+    // Send forgot password email
+    try {
+      console.log(`📧 [FORGOT PASSWORD] Sending forgot password email to: ${email}`);
+      await sendForgotPasswordEmail({
+        email: email,
+        otp: otp,
+        subject: "Reset Your Password - Pryve"
+      });
+      console.log(`✅ [FORGOT PASSWORD] Forgot password email sent successfully to: ${email}`);
+    } catch (emailError) {
+      console.error(`❌ [FORGOT PASSWORD] Failed to send forgot password email to ${email}:`, emailError.message);
+      throw new AppError("Failed to send password reset email. Please try again.", HttpStatusCodes.INTERNAL_SERVER_ERROR);
+    }
 
     return {
       message:
@@ -577,8 +652,8 @@ class UserService {
       if (fullName !== undefined) updates.fullName = fullName;
 
       // Additional profile fields
-      if (gender !== undefined) updates.gender = gender;
-      if (dateOfBirth !== undefined) updates.dateOfBirth = dateOfBirth;
+      if (gender !== undefined) updates.gender = gender.toUpperCase();
+      if (dateOfBirth !== undefined) updates.dateOfBirth = new Date(dateOfBirth);
       if (country !== undefined) updates.country = country;
       if (region !== undefined) updates.region = region;
       if (phoneNumber !== undefined) updates.phoneNumber = phoneNumber;

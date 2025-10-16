@@ -105,7 +105,7 @@
         "url": { "raw": "{{baseUrl}}/api/v1/users/update-profile/{{userId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","users","update-profile","{{userId}}"] },
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"fullName\": \"Updated Name\",\n  \"userName\": \"updated_username\",\n  \"profilePhoto\": \"https://example.com/photo.jpg\"\n}"
+          "raw": "{\n  \"fullName\": \"Updated Name\",\n  \"userName\": \"updated_username\",\n  \"profilePhoto\": \"https://example.com/photo.jpg\",\n  \"gender\": \"Male\",\n  \"dateOfBirth\": \"1990-01-01T00:00:00.000Z\",\n  \"country\": \"United States\",\n  \"region\": \"California\",\n  \"phoneNumber\": \"+1234567890\",\n  \"bio\": \"This is my bio\"\n}"
         }
       }
     },

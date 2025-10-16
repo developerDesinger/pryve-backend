@@ -27,6 +27,7 @@ if (process.env.NODE_ENV === "PRODUCTION") {
 }
 
 const usersRoutes = require("./src/api/v1/routes/user");
+const chatRoutes = require("./src/api/v1/routes/chat");
 // const cronRoutes = require("./src/api/v1/routes/cron");
 const app = express();
 //const admin = require("firebase-admin");
@@ -170,6 +171,7 @@ app.get('/test-upload', (req, res) => {
 
 // Routes
 app.use("/api/v1/users", usersRoutes);
+app.use("/api/v1/chats", chatRoutes);
 // app.use("/api/v1/cron", cronRoutes);
 
 

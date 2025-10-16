@@ -36,7 +36,130 @@ model User {
   // New field for testing update functionality
   bio          String?
 
+  // Chat relationships
+  chats            Chat[]
+  sentMessages     Message[]
+  messageReactions MessageReaction[]
+  readReceipts     MessageReadReceipt[]
+
   @@map("users")
+}
+
+model Chat {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Chat basic info
+  name        String?
+  description String?
+  type        ChatType @default(PERSONAL_AI)
+  isActive    Boolean  @default(true)
+  
+  // Owner of the chat (one-to-one with user)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Messages in this chat
+  messages    Message[]
+  
+  // Chat metadata
+  lastMessageAt DateTime?
+  lastMessage   String?
+  messageCount   Int      @default(0)
+  
+  // AI Chat specific fields
+  aiModel       String?  // GPT-4, GPT-3.5, etc.
+  systemPrompt  String?  // Custom system prompt for this chat
+  temperature   Float?   // AI response temperature
+  
+  @@map("chats")
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Message content
+  content   String?
+  type      MessageType @default(TEXT)
+  status    MessageStatus @default(SENT)
+  
+  // Relationships
+  chatId    String
+  senderId  String
+  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender    User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  
+  // Media files (stored in S3)
+  imageUrl     String? // URL for image files
+  audioUrl     String? // URL for audio files
+  videoUrl     String? // URL for video files
+  fileUrl      String? // URL for other file types
+  
+  // Media metadata
+  mediaType    String? // MIME type
+  mediaSize    Int?    // File size in bytes
+  mediaDuration Int?   // For audio/video files in seconds
+  mediaName    String? // Original filename
+  
+  // Message metadata
+  replyToId    String?
+  replyTo      Message? @relation("MessageReplies", fields: [replyToId], references: [id])
+  replies      Message[] @relation("MessageReplies")
+  
+  // Message reactions
+  reactions    MessageReaction[]
+  
+  // Read receipts
+  readReceipts MessageReadReceipt[]
+  
+  // Message editing
+  editedAt     DateTime?
+  editedContent String?
+  
+  // AI specific fields
+  isFromAI     Boolean  @default(false)
+  aiModel      String?  // Which AI model generated this response
+  tokensUsed   Int?     // Number of tokens used for this message
+  processingTime Int?   // Time taken to generate response in ms
+  
+  @@map("messages")
+}
+
+model MessageReaction {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  
+  // Relationships
+  messageId String
+  userId    String
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Reaction details
+  emoji     String
+  
+  @@unique([messageId, userId])
+  @@map("message_reactions")
+}
+
+model MessageReadReceipt {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  
+  // Relationships
+  messageId String
+  userId    String
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Read status
+  readAt    DateTime @default(now())
+  
+  @@unique([messageId, userId])
+  @@map("message_read_receipts")
 }
 
 enum Role {
@@ -61,4 +184,26 @@ enum Gender {
   FEMALE
   OTHER
   PREFER_NOT_TO_SAY
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  AUDIO
+  VIDEO
+  FILE
+  AI_RESPONSE
+}
+
+enum MessageStatus {
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  PROCESSING
+}
+
+enum ChatType {
+  PERSONAL_AI
+  ASSISTANT
 }

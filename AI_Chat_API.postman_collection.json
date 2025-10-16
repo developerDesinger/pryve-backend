@@ -1,0 +1,406 @@
+{
+  "info": {
+    "name": "AI Chat System API",
+    "description": "Complete API collection for AI chat system with OpenAI integration",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jwt_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "jwt_token",
+      "value": "your_jwt_token_here",
+      "type": "string"
+    },
+    {
+      "key": "chat_id",
+      "value": "your_chat_id_here",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Login User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/users/login",
+              "host": ["{{base_url}}"],
+              "path": ["users", "login"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Register User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newuser@example.com\",\n  \"password\": \"password123\",\n  \"fullName\": \"New User\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/users/register",
+              "host": ["{{base_url}}"],
+              "path": ["users", "register"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Chat Management",
+      "item": [
+        {
+          "name": "Create New Chat",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"My AI Assistant\",\n  \"description\": \"Personal AI chat for help and questions\",\n  \"aiModel\": \"gpt-3.5-turbo\",\n  \"systemPrompt\": \"You are a helpful AI assistant. Be friendly and informative.\",\n  \"temperature\": 0.7\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/chats",
+              "host": ["{{base_url}}"],
+              "path": ["chats"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get User Chats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/chats?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["chats"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Chat Details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/chats/{{chat_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["chats", "{{chat_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Chat Settings",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Chat Name\",\n  \"description\": \"Updated description\",\n  \"aiModel\": \"gpt-4\",\n  \"systemPrompt\": \"You are an expert AI assistant.\",\n  \"temperature\": 0.5\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/chats/{{chat_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["chats", "{{chat_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Chat",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/chats/{{chat_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["chats", "{{chat_id}}"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Messages",
+      "item": [
+        {
+          "name": "Send Text Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Hello! Can you help me understand machine learning?\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/chats/{{chat_id}}/messages",
+              "host": ["{{base_url}}"],
+              "path": ["chats", "{{chat_id}}", "messages"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Send Message with Image File",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "content",
+                  "value": "What do you see in this image?",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "path/to/image.jpg"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/chats/{{chat_id}}/messages",
+              "host": ["{{base_url}}"],
+              "path": ["chats", "{{chat_id}}", "messages"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Send Message with Audio File",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "content",
+                  "value": "Can you transcribe and analyze this audio?",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "path/to/audio.mp3"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/chats/{{chat_id}}/messages",
+              "host": ["{{base_url}}"],
+              "path": ["chats", "{{chat_id}}", "messages"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Send Message with Video File",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "content",
+                  "value": "What do you see in this video?",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "path/to/video.mp4"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/chats/{{chat_id}}/messages",
+              "host": ["{{base_url}}"],
+              "path": ["chats", "{{chat_id}}", "messages"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Chat Messages",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/chats/{{chat_id}}/messages?page=1&limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["chats", "{{chat_id}}", "messages"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "AI Models",
+      "item": [
+        {
+          "name": "Get Available AI Models",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/chats/ai/models",
+              "host": ["{{base_url}}"],
+              "path": ["chats", "ai", "models"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Complete Flow Examples",
+      "item": [
+        {
+          "name": "Complete Image Flow",
+          "item": [
+            {
+              "name": "Send Image to Chat",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "content",
+                      "value": "What do you see in this image?",
+                      "type": "text"
+                    },
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "path/to/image.jpg"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{base_url}}/chats/{{chat_id}}/messages",
+                  "host": ["{{base_url}}"],
+                  "path": ["chats", "{{chat_id}}", "messages"]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Complete Audio Flow",
+          "item": [
+            {
+              "name": "Send Audio to Chat",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "content",
+                      "value": "Can you transcribe and analyze this audio?",
+                      "type": "text"
+                    },
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "path/to/audio.mp3"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{base_url}}/chats/{{chat_id}}/messages",
+                  "host": ["{{base_url}}"],
+                  "path": ["chats", "{{chat_id}}", "messages"]
+                }
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
