@@ -110,15 +110,12 @@
 
 ## 🔍 **Search & History APIs**
 
-### 19. **Search Chat Messages**
-- **GET** `/api/v1/chats/:chatId/search`
-- **Purpose**: Search messages in specific chat
-- **Query**: `?q=searchTerm&page=1&limit=20`
-
-### 20. **Search All Chats**
+### 19. **Search Conversations**
 - **GET** `/api/v1/chats/search`
-- **Purpose**: Search across all user's AI chats
-- **Query**: `?q=searchTerm&page=1&limit=20`
+- **Purpose**: Search across all user's chats and messages
+- **Query**: `?q=searchTerm&type=all&page=1&limit=20`
+- **Type Options**: `all` (default), `chats`, `messages`
+- **Response**: Returns both matching chats and messages with pagination
 
 ### 21. **Get Chat History**
 - **GET** `/api/v1/chats/:chatId/history`
@@ -237,5 +234,45 @@
   "createdAt": "2024-01-01T10:01:30Z",
   "senderId": "ai_assistant",
   "chatId": "chat_456"
+}
+```
+
+### **Search Conversations Response:**
+```json
+{
+  "message": "Search results fetched successfully.",
+  "success": true,
+  "data": {
+    "chats": [
+      {
+        "id": "chat_123",
+        "name": "Python Programming Help",
+        "description": "Chat about Python coding questions",
+        "lastMessageAt": "2024-01-01T10:00:00Z",
+        "messageCount": 15,
+        "_count": { "messages": 15 }
+      }
+    ],
+    "messages": [
+      {
+        "id": "msg_456",
+        "content": "How do I create a Python function?",
+        "type": "TEXT",
+        "isFromAI": false,
+        "createdAt": "2024-01-01T09:30:00Z",
+        "chat": {
+          "id": "chat_123",
+          "name": "Python Programming Help",
+          "lastMessageAt": "2024-01-01T10:00:00Z"
+        }
+      }
+    ]
+  },
+  "pagination": {
+    "currentPage": 1,
+    "totalPages": 3,
+    "totalItems": 45,
+    "limit": 20
+  }
 }
 ```

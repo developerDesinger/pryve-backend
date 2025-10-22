@@ -97,6 +97,16 @@ class ChatController {
   });
 
   /**
+   * Search conversations (chats and messages)
+   * GET /api/v1/chats/search
+   */
+  static searchConversations = catchAsyncHandler(async (req, res) => {
+    const { id: userId } = req.user;
+    const result = await ChatService.searchConversations(userId, req.query);
+    return res.status(200).json(result);
+  });
+
+  /**
    * Get available AI models
    * GET /api/v1/ai/models
    */

@@ -39,6 +39,7 @@ const upload = multer({
 // Chat Management Routes
 router.post("/", isAuthenticated, ChatController.createChat);
 router.get("/", isAuthenticated, ChatController.getUserChats);
+router.get("/search", isAuthenticated, ChatController.searchConversations);
 router.get("/:chatId", isAuthenticated, ChatController.getChatDetails);
 router.patch("/:chatId", isAuthenticated, ChatController.updateChat);
 router.delete("/:chatId", isAuthenticated, ChatController.deleteChat);
