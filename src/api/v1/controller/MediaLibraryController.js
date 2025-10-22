@@ -7,8 +7,15 @@ class MediaLibraryController {
    * GET /api/v1/media
    */
   static getUserMedia = catchAsyncHandler(async (req, res) => {
+    console.log('=== MediaLibraryController.getUserMedia START ===');
+    console.log('User from request:', req.user);
+    console.log('Query params:', req.query);
+    
     const { id: userId } = req.user;
+    console.log('Extracted userId:', userId);
+    
     const result = await MediaLibraryService.getUserMedia(userId, req.query);
+    console.log('=== MediaLibraryController.getUserMedia SUCCESS ===', result);
     return res.status(200).json(result);
   });
 

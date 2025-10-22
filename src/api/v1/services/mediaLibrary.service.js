@@ -92,11 +92,17 @@ class MediaLibraryService {
    * Get all media files for a user
    */
   static async getUserMedia(userId, query) {
+    console.log('=== MediaLibraryService.getUserMedia START ===');
+    console.log('UserId:', userId);
+    console.log('Query params:', query);
+    
     const page = parseInt(query.page) || 1;
     const limit = parseInt(query.limit) || 20;
     const skip = (page - 1) * limit;
     const type = query.type || 'all'; // 'images', 'audio', 'videos', 'documents', 'all'
     const search = query.search || '';
+
+    console.log('Processed params:', { page, limit, skip, type, search });
 
     // Build where clause
     let where = { userId };
@@ -112,31 +118,45 @@ class MediaLibraryService {
       ];
     }
 
-    const totalFiles = await prisma.mediaLibrary.count({ where });
-    
-    const files = await prisma.mediaLibrary.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy: { uploadedAt: 'desc' },
-      include: {
-        chat: {
-          select: { id: true, name: true }
-        }
-      }
-    });
+    console.log('Where clause:', JSON.stringify(where, null, 2));
 
-    return {
-      message: "Media files fetched successfully.",
-      success: true,
-      data: files,
-      pagination: {
-        currentPage: page,
-        totalPages: Math.ceil(totalFiles / limit),
-        totalItems: totalFiles,
-        limit,
-      },
-    };
+    try {
+      const totalFiles = await prisma.mediaLibrary.count({ where });
+      console.log('Total files count:', totalFiles);
+      
+      const files = await prisma.mediaLibrary.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { uploadedAt: 'desc' },
+        include: {
+          chat: {
+            select: { id: true, name: true }
+          }
+        }
+      });
+
+      console.log('Files found:', files.length);
+      console.log('Files data:', files);
+
+      const result = {
+        message: "Media files fetched successfully.",
+        success: true,
+        data: files,
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(totalFiles / limit),
+          totalItems: totalFiles,
+          limit,
+        },
+      };
+      
+      console.log('=== MediaLibraryService.getUserMedia SUCCESS ===', result);
+      return result;
+    } catch (error) {
+      console.error('Error in getUserMedia:', error);
+      throw error;
+    }
   }
 
   /**
