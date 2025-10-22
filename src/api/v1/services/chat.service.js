@@ -2,6 +2,7 @@ const OpenAI = require('openai');
 const prisma = require("../../../lib/prisma");
 const AppError = require("../utils/AppError");
 const HttpStatusCodes = require("../enums/httpStatusCode");
+const MediaLibraryService = require("./mediaLibrary.service");
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -134,7 +135,14 @@ class ChatService {
       mediaName = videoFile.originalname || "video.mp4";
     }
 
-    // Create user message (don't save file data, just metadata)
+    // Save file to media library if present
+    let mediaRecord = null;
+    if (imageFile || audioFile || videoFile) {
+      const fileToSave = imageFile || audioFile || videoFile;
+      mediaRecord = await MediaLibraryService.saveFile(fileToSave, userId, chatId, null);
+    }
+
+    // Create user message with file metadata
     const userMessage = await prisma.message.create({
       data: {
         content,
@@ -146,8 +154,20 @@ class ChatService {
         mediaSize,
         mediaName,
         isFromAI: false,
+        // Add file URLs if media was saved
+        imageUrl: imageFile ? mediaRecord?.fileUrl : null,
+        audioUrl: audioFile ? mediaRecord?.fileUrl : null,
+        videoUrl: videoFile ? mediaRecord?.fileUrl : null,
       },
     });
+
+    // Update media record with message ID
+    if (mediaRecord) {
+      await prisma.mediaLibrary.update({
+        where: { id: mediaRecord.mediaId },
+        data: { messageId: userMessage.id },
+      });
+    }
 
     // Prepare messages for OpenAI context
     const previousMessages = await prisma.message.findMany({

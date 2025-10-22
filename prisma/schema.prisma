@@ -41,6 +41,7 @@ model User {
   sentMessages     Message[]
   messageReactions MessageReaction[]
   readReceipts     MessageReadReceipt[]
+  mediaLibrary     MediaLibrary[]
 
   @@map("users")
 }
@@ -62,6 +63,7 @@ model Chat {
   
   // Messages in this chat
   messages    Message[]
+  mediaFiles  MediaLibrary[]
   
   // Chat metadata
   lastMessageAt DateTime?
@@ -206,4 +208,31 @@ enum MessageStatus {
 enum ChatType {
   PERSONAL_AI
   ASSISTANT
+}
+
+model MediaLibrary {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // File information
+  fileName    String
+  originalName String
+  filePath    String
+  fileUrl     String
+  fileType    String   // 'images', 'audio', 'videos', 'documents'
+  mimeType    String
+  fileSize    Int
+  
+  // Relationships
+  userId      String
+  chatId      String?
+  messageId   String?
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chat        Chat?    @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  
+  // Metadata
+  uploadedAt  DateTime @default(now())
+  
+  @@map("media_library")
 }

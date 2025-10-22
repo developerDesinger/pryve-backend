@@ -28,6 +28,7 @@ if (process.env.NODE_ENV === "PRODUCTION") {
 
 const usersRoutes = require("./src/api/v1/routes/user");
 const chatRoutes = require("./src/api/v1/routes/chat");
+const mediaRoutes = require("./src/api/v1/routes/media");
 // const cronRoutes = require("./src/api/v1/routes/cron");
 const app = express();
 //const admin = require("firebase-admin");
@@ -163,6 +164,7 @@ const uploadAudio = multer({
 
 // Serve static files from uploads directory
 app.use('/uploads', express.static('uploads'));
+app.use('/uploads/media', express.static('uploads/media'));
 
 // Serve test page
 app.get('/test-upload', (req, res) => {
@@ -172,6 +174,7 @@ app.get('/test-upload', (req, res) => {
 // Routes
 app.use("/api/v1/users", usersRoutes);
 app.use("/api/v1/chats", chatRoutes);
+app.use("/api/v1/media", mediaRoutes);
 // app.use("/api/v1/cron", cronRoutes);
 
 
