@@ -46,14 +46,21 @@ router.delete("/:chatId", isAuthenticated, ChatController.deleteChat);
 
 // Message Routes - Handle text, image, audio, video in one endpoint
 router.post("/:chatId/messages", isAuthenticated, (req, res, next) => {
+  console.log('=== Multer Upload Middleware ===');
+  console.log('Request headers:', req.headers);
+  console.log('Content-Type:', req.headers['content-type']);
+  
   upload.single('file')(req, res, (err) => {
     if (err) {
+      console.log('Multer error:', err);
       return res.status(400).json({
         status: false,
         message: err.message,
         data: []
       });
     }
+    console.log('Multer processing completed successfully');
+    console.log('File after multer:', req.file);
     next();
   });
 }, ChatController.sendMessage);
@@ -61,5 +68,38 @@ router.get("/:chatId/messages", isAuthenticated, ChatController.getChatMessages)
 
 // AI Models Route
 router.get("/ai/models", ChatController.getAvailableModels);
+
+// Test endpoint for file upload debugging
+router.post("/test-upload", isAuthenticated, (req, res, next) => {
+  console.log('=== Test Upload Endpoint ===');
+  console.log('Request body:', req.body);
+  console.log('Request file:', req.file);
+  console.log('Request files:', req.files);
+  
+  upload.single('file')(req, res, (err) => {
+    if (err) {
+      console.log('Multer error in test:', err);
+      return res.status(400).json({
+        status: false,
+        message: err.message,
+        data: []
+      });
+    }
+    
+    console.log('Test upload successful');
+    res.json({
+      status: true,
+      message: "File upload test successful",
+      data: {
+        file: req.file ? {
+          originalname: req.file.originalname,
+          mimetype: req.file.mimetype,
+          size: req.file.size,
+          hasBuffer: !!req.file.buffer
+        } : null
+      }
+    });
+  });
+});
 
 module.exports = router;

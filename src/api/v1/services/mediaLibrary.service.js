@@ -11,22 +11,42 @@ class MediaLibraryService {
    */
   static async saveFile(file, userId, chatId, messageId) {
     try {
+      console.log('=== MediaLibraryService.saveFile START ===');
+      console.log('File details:', {
+        originalname: file.originalname,
+        mimetype: file.mimetype,
+        size: file.size,
+        hasBuffer: !!file.buffer
+      });
+      console.log('Parameters:', { userId, chatId, messageId });
+
       // Determine file type and folder
       const fileType = this.getFileType(file.mimetype);
       const folder = this.getFolderPath(fileType);
       const fileName = this.generateFileName(file.originalname, file.mimetype);
       const filePath = path.join(folder, fileName);
       
+      console.log('File processing details:', {
+        fileType,
+        folder,
+        fileName,
+        filePath
+      });
+      
       // Check and create directory with proper error handling
       await this.ensureDirectoryExists(folder);
       
       // Save file to disk
+      console.log('Saving file to disk...');
       await fs.writeFile(filePath, file.buffer);
+      console.log('File saved successfully to disk');
       
       // Generate file URL for API responses
       const fileUrl = `/uploads/media/${fileType}/${fileName}`;
+      console.log('Generated file URL:', fileUrl);
       
       // Save file metadata to database
+      console.log('Saving to database...');
       const mediaRecord = await prisma.mediaLibrary.create({
         data: {
           userId,
@@ -42,8 +62,9 @@ class MediaLibraryService {
           uploadedAt: new Date(),
         },
       });
+      console.log('Database record created:', mediaRecord.id);
       
-      return {
+      const result = {
         success: true,
         fileUrl,
         fileName,
@@ -51,6 +72,8 @@ class MediaLibraryService {
         mimeType: file.mimetype,
         mediaId: mediaRecord.id,
       };
+      console.log('=== MediaLibraryService.saveFile SUCCESS ===', result);
+      return result;
     } catch (error) {
       console.error('Error saving file:', error);
       console.error('Error details:', {

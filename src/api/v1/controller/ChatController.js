@@ -41,8 +41,16 @@ class ChatController {
     const { id: userId } = req.user;
     const { chatId } = req.params;
     
+    console.log('=== ChatController.sendMessage START ===');
+    console.log('Request body:', req.body);
+    console.log('Request file:', req.file);
+    console.log('Request files:', req.files);
+    console.log('User ID:', userId);
+    console.log('Chat ID:', chatId);
+    
     // Check for multer errors
     if (req.fileValidationError) {
+      console.log('Multer validation error:', req.fileValidationError);
       return res.status(400).json({
         status: false,
         message: req.fileValidationError,
@@ -59,7 +67,20 @@ class ChatController {
       videoFile: req.files?.video?.[0],
     };
     
+    console.log('Message data prepared:', {
+      content: messageData.content,
+      hasImageFile: !!messageData.imageFile,
+      hasAudioFile: !!messageData.audioFile,
+      hasVideoFile: !!messageData.videoFile,
+      imageFileDetails: messageData.imageFile ? {
+        originalname: messageData.imageFile.originalname,
+        mimetype: messageData.imageFile.mimetype,
+        size: messageData.imageFile.size
+      } : null
+    });
+    
     const result = await ChatService.sendMessage(chatId, userId, messageData);
+    console.log('=== ChatController.sendMessage SUCCESS ===', result);
     return res.status(200).json(result);
   });
 

@@ -139,7 +139,18 @@ class ChatService {
     let mediaRecord = null;
     if (imageFile || audioFile || videoFile) {
       const fileToSave = imageFile || audioFile || videoFile;
+      console.log('=== ChatService.sendMessage - File Upload ===');
+      console.log('File to save:', {
+        originalname: fileToSave?.originalname,
+        mimetype: fileToSave?.mimetype,
+        size: fileToSave?.size,
+        hasBuffer: !!fileToSave?.buffer
+      });
+      console.log('File type detected:', messageType);
       mediaRecord = await MediaLibraryService.saveFile(fileToSave, userId, chatId, null);
+      console.log('Media record created:', mediaRecord);
+    } else {
+      console.log('No file provided for upload');
     }
 
     // Create user message with file metadata
