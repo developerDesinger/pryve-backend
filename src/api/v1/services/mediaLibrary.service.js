@@ -108,7 +108,20 @@ class MediaLibraryService {
     let where = { userId };
     
     if (type !== 'all') {
-      where.fileType = type;
+      // Convert singular types to plural to match database values
+      const typeMapping = {
+        'image': 'images',
+        'images': 'images',
+        'audio': 'audio',
+        'video': 'videos',
+        'videos': 'videos',
+        'document': 'documents',
+        'documents': 'documents'
+      };
+      
+      const dbFileType = typeMapping[type] || type;
+      where.fileType = dbFileType;
+      console.log('Type mapping:', { inputType: type, dbFileType });
     }
     
     if (search) {
@@ -181,7 +194,19 @@ class MediaLibraryService {
     let where = { chatId, userId };
     
     if (type !== 'all') {
-      where.fileType = type;
+      // Convert singular types to plural to match database values
+      const typeMapping = {
+        'image': 'images',
+        'images': 'images',
+        'audio': 'audio',
+        'video': 'videos',
+        'videos': 'videos',
+        'document': 'documents',
+        'documents': 'documents'
+      };
+      
+      const dbFileType = typeMapping[type] || type;
+      where.fileType = dbFileType;
     }
 
     const totalFiles = await prisma.mediaLibrary.count({ where });
