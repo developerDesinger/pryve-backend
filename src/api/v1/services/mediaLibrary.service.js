@@ -17,8 +17,8 @@ class MediaLibraryService {
       const fileName = this.generateFileName(file.originalname, file.mimetype);
       const filePath = path.join(folder, fileName);
       
-      // Ensure directory exists
-      await fs.mkdir(folder, { recursive: true });
+      // Check and create directory with proper error handling
+      await this.ensureDirectoryExists(folder);
       
       // Save file to disk
       await fs.writeFile(filePath, file.buffer);
@@ -53,7 +53,15 @@ class MediaLibraryService {
       };
     } catch (error) {
       console.error('Error saving file:', error);
-      throw new AppError('Failed to save file', HttpStatusCodes.INTERNAL_SERVER_ERROR);
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        errno: error.errno,
+        syscall: error.syscall,
+        path: error.path,
+        stack: error.stack
+      });
+      throw new AppError(`Failed to save file: ${error.message}`, HttpStatusCodes.INTERNAL_SERVER_ERROR);
     }
   }
 
@@ -264,6 +272,27 @@ class MediaLibraryService {
       'video/webm': '.webm',
     };
     return mimeToExt[mimeType] || '.bin';
+  }
+
+  /**
+   * Ensure directory exists with proper error handling
+   */
+  static async ensureDirectoryExists(dirPath) {
+    try {
+      // Check if directory exists
+      await fs.access(dirPath);
+      console.log(`Directory exists: ${dirPath}`);
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        // Directory doesn't exist, create it
+        console.log(`Creating directory: ${dirPath}`);
+        await fs.mkdir(dirPath, { recursive: true });
+        console.log(`Directory created successfully: ${dirPath}`);
+      } else {
+        console.error(`Error accessing directory ${dirPath}:`, error);
+        throw new Error(`Cannot access directory ${dirPath}: ${error.message}`);
+      }
+    }
   }
 }
 
