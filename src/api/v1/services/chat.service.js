@@ -1,4 +1,4 @@
-const OpenAI = require('openai');
+const OpenAI = require("openai");
 const prisma = require("../../../lib/prisma");
 const AppError = require("../utils/AppError");
 const HttpStatusCodes = require("../enums/httpStatusCode");
@@ -8,6 +8,27 @@ const MediaLibraryService = require("./mediaLibrary.service");
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+// Helper to compute zodiac sign from birthday
+function getZodiacSign(b) {
+  if (!b) return null;
+  const d = new Date(b);
+  if (isNaN(d)) return null;
+  const m = d.getUTCMonth() + 1,
+    day = d.getUTCDate();
+  if ((m === 1 && day >= 20) || (m === 2 && day <= 18)) return "Aquarius";
+  if ((m === 2 && day >= 19) || (m === 3 && day <= 20)) return "Pisces";
+  if ((m === 3 && day >= 21) || (m === 4 && day <= 19)) return "Aries";
+  if ((m === 4 && day >= 20) || (m === 5 && day <= 20)) return "Taurus";
+  if ((m === 5 && day >= 21) || (m === 6 && day <= 20)) return "Gemini";
+  if ((m === 6 && day >= 21) || (m === 7 && day <= 22)) return "Cancer";
+  if ((m === 7 && day >= 23) || (m === 8 && day <= 22)) return "Leo";
+  if ((m === 8 && day >= 23) || (m === 9 && day <= 22)) return "Virgo";
+  if ((m === 9 && day >= 23) || (m === 10 && day <= 22)) return "Libra";
+  if ((m === 10 && day >= 23) || (m === 11 && day <= 21)) return "Scorpio";
+  if ((m === 11 && day >= 22) || (m === 12 && day <= 21)) return "Sagittarius";
+  return "Capricorn";
+}
 
 class ChatService {
   /**
@@ -51,12 +72,12 @@ class ChatService {
       where: { userId, isActive: true },
       skip,
       take: limit,
-      orderBy: { lastMessageAt: 'desc' },
+      orderBy: { lastMessageAt: "desc" },
       include: {
         _count: {
-          select: { messages: true }
-        }
-      }
+          select: { messages: true },
+        },
+      },
     });
 
     return {
@@ -80,7 +101,7 @@ class ChatService {
       where: { id: chatId, userId },
       include: {
         messages: {
-          orderBy: { createdAt: 'asc' },
+          orderBy: { createdAt: "asc" },
           take: 50, // Get last 50 messages
         },
       },
@@ -139,18 +160,23 @@ class ChatService {
     let mediaRecord = null;
     if (imageFile || audioFile || videoFile) {
       const fileToSave = imageFile || audioFile || videoFile;
-      console.log('=== ChatService.sendMessage - File Upload ===');
-      console.log('File to save:', {
+      console.log("=== ChatService.sendMessage - File Upload ===");
+      console.log("File to save:", {
         originalname: fileToSave?.originalname,
         mimetype: fileToSave?.mimetype,
         size: fileToSave?.size,
-        hasBuffer: !!fileToSave?.buffer
+        hasBuffer: !!fileToSave?.buffer,
       });
-      console.log('File type detected:', messageType);
-      mediaRecord = await MediaLibraryService.saveFile(fileToSave, userId, chatId, null);
-      console.log('Media record created:', mediaRecord);
+      console.log("File type detected:", messageType);
+      mediaRecord = await MediaLibraryService.saveFile(
+        fileToSave,
+        userId,
+        chatId,
+        null
+      );
+      console.log("Media record created:", mediaRecord);
     } else {
-      console.log('No file provided for upload');
+      console.log("No file provided for upload");
     }
 
     // Create user message with file metadata
@@ -183,12 +209,12 @@ class ChatService {
     // Prepare messages for OpenAI context
     const previousMessages = await prisma.message.findMany({
       where: { chatId },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: "asc" },
       take: 20, // Get last 20 messages for context
     });
 
     // Convert to OpenAI format
-    const messages = previousMessages.map(msg => ({
+    const messages = previousMessages.map((msg) => ({
       role: msg.isFromAI ? "assistant" : "user",
       content: msg.content,
     }));
@@ -201,41 +227,54 @@ class ChatService {
       });
     }
 
+    // Inject zodiac from user's birthday
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { birthday: true },
+    });
+    const zodiac = getZodiacSign(user?.birthday);
+    if (zodiac) {
+      messages.unshift({ role: "system", content: `User Zodiac: ${zodiac} ` });
+    }
+    if (user?.birthday) {
+      messages.unshift({
+        role: "system",
+        content: `User Birthdate: ${user.birthday}`,
+      });
+    }
     let aiResponse = null;
     let tokensUsed = 0;
     let processingTime = 0;
 
     try {
       const startTime = Date.now();
-      
+
       // Call OpenAI API based on message type
       let completion;
-      
+
       if (imageFile) {
         // Use OpenAI Vision API for images
         // Convert file buffer to base64 for OpenAI
-        const base64Image = imageFile.buffer.toString('base64');
+        const base64Image = imageFile.buffer.toString("base64");
         const imageUrl = `data:${imageFile.mimetype};base64,${base64Image}`;
-        
+
+        const visionMessages = [
+          ...messages,
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: content || "What do you see in this image?",
+              },
+              { type: "image_url", image_url: { url: imageUrl } },
+            ],
+          },
+        ];
+
         completion = await openai.chat.completions.create({
           model: "gpt-4o", // Updated to use the current vision model
-          messages: [
-            {
-              role: "user",
-              content: [
-                {
-                  type: "text",
-                  text: content || "What do you see in this image?"
-                },
-                {
-                  type: "image_url",
-                  image_url: {
-                    url: imageUrl
-                  }
-                }
-              ]
-            }
-          ],
+          messages: visionMessages,
           max_tokens: 1000,
         });
       } else if (audioFile) {
@@ -244,7 +283,7 @@ class ChatService {
           file: audioFile.buffer, // Use file buffer directly
           model: "whisper-1",
         });
-        
+
         // Then use the transcription in a regular chat completion
         completion = await openai.chat.completions.create({
           model: chat.aiModel,
@@ -252,8 +291,10 @@ class ChatService {
             ...messages, // Include all previous messages
             {
               role: "user",
-              content: `Transcription: ${transcription.text}\n\n${content || "Please analyze this audio transcription."}`
-            }
+              content: `Transcription: ${transcription.text}\n\n${
+                content || "Please analyze this audio transcription."
+              }`,
+            },
           ],
           temperature: chat.temperature,
           max_tokens: 1000,
@@ -264,7 +305,7 @@ class ChatService {
           role: "user",
           content: content,
         });
-        
+
         completion = await openai.chat.completions.create({
           model: chat.aiModel,
           messages: messages,
@@ -294,11 +335,12 @@ class ChatService {
       }
     } catch (error) {
       console.error("OpenAI API Error:", error);
-      
+
       // Create error message
       aiResponse = await prisma.message.create({
         data: {
-          content: "Sorry, I encountered an error processing your request. Please try again.",
+          content:
+            "Sorry, I encountered an error processing your request. Please try again.",
           type: "TEXT",
           chatId,
           senderId: userId,
@@ -354,7 +396,7 @@ class ChatService {
       where: { chatId },
       skip,
       take: limit,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
 
     return {
@@ -374,7 +416,7 @@ class ChatService {
    * Search messages within a specific chat by text content
    */
   static async searchChatMessages(chatId, userId, query) {
-    const searchTerm = (query.q || '').trim();
+    const searchTerm = (query.q || "").trim();
     const page = parseInt(query.page) || 1;
     const limit = parseInt(query.limit) || 20;
     const skip = (page - 1) * limit;
@@ -404,7 +446,7 @@ class ChatService {
 
     const where = {
       chatId,
-      content: { contains: searchTerm, mode: 'insensitive' },
+      content: { contains: searchTerm, mode: "insensitive" },
     };
 
     const totalItems = await prisma.message.count({ where });
@@ -412,7 +454,7 @@ class ChatService {
       where,
       skip,
       take: limit,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
 
     return {
@@ -432,7 +474,7 @@ class ChatService {
    * Search across all user's chats by message content
    */
   static async searchAllChats(userId, query) {
-    const searchTerm = (query.q || '').trim();
+    const searchTerm = (query.q || "").trim();
     const page = parseInt(query.page) || 1;
     const limit = parseInt(query.limit) || 20;
     const skip = (page - 1) * limit;
@@ -454,7 +496,7 @@ class ChatService {
     // Only messages from chats owned by the user
     const where = {
       chat: { userId },
-      content: { contains: searchTerm, mode: 'insensitive' },
+      content: { contains: searchTerm, mode: "insensitive" },
     };
 
     const totalItems = await prisma.message.count({ where });
@@ -462,7 +504,7 @@ class ChatService {
       where,
       skip,
       take: limit,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       include: {
         chat: {
           select: { id: true, name: true, lastMessageAt: true },
@@ -542,11 +584,11 @@ class ChatService {
    * Search conversations (chats and messages) for a user
    */
   static async searchConversations(userId, query) {
-    const searchTerm = (query.q || '').trim();
+    const searchTerm = (query.q || "").trim();
     const page = parseInt(query.page) || 1;
     const limit = parseInt(query.limit) || 20;
     const skip = (page - 1) * limit;
-    const type = query.type || 'all'; // 'chats', 'messages', 'all'
+    const type = query.type || "all"; // 'chats', 'messages', 'all'
 
     if (!searchTerm) {
       return {
@@ -571,27 +613,27 @@ class ChatService {
     };
 
     // Search chats if type is 'chats' or 'all'
-    if (type === 'chats' || type === 'all') {
+    if (type === "chats" || type === "all") {
       const chatWhere = {
         userId,
         isActive: true,
         OR: [
-          { name: { contains: searchTerm, mode: 'insensitive' } },
-          { description: { contains: searchTerm, mode: 'insensitive' } },
+          { name: { contains: searchTerm, mode: "insensitive" } },
+          { description: { contains: searchTerm, mode: "insensitive" } },
         ],
       };
 
       const totalChats = await prisma.chat.count({ where: chatWhere });
       const chats = await prisma.chat.findMany({
         where: chatWhere,
-        skip: type === 'chats' ? skip : 0,
-        take: type === 'chats' ? limit : 10, // Limit to 10 if searching both
-        orderBy: { lastMessageAt: 'desc' },
+        skip: type === "chats" ? skip : 0,
+        take: type === "chats" ? limit : 10, // Limit to 10 if searching both
+        orderBy: { lastMessageAt: "desc" },
         include: {
           _count: {
-            select: { messages: true }
-          }
-        }
+            select: { messages: true },
+          },
+        },
       });
 
       results.chats = chats;
@@ -604,18 +646,18 @@ class ChatService {
     }
 
     // Search messages if type is 'messages' or 'all'
-    if (type === 'messages' || type === 'all') {
+    if (type === "messages" || type === "all") {
       const messageWhere = {
         chat: { userId },
-        content: { contains: searchTerm, mode: 'insensitive' },
+        content: { contains: searchTerm, mode: "insensitive" },
       };
 
       const totalMessages = await prisma.message.count({ where: messageWhere });
       const messages = await prisma.message.findMany({
         where: messageWhere,
-        skip: type === 'messages' ? skip : 0,
-        take: type === 'messages' ? limit : 10, // Limit to 10 if searching both
-        orderBy: { createdAt: 'desc' },
+        skip: type === "messages" ? skip : 0,
+        take: type === "messages" ? limit : 10, // Limit to 10 if searching both
+        orderBy: { createdAt: "desc" },
         include: {
           chat: {
             select: { id: true, name: true, lastMessageAt: true },
@@ -634,8 +676,10 @@ class ChatService {
 
     // Calculate combined pagination for 'all' type
     let combinedPagination = null;
-    if (type === 'all') {
-      const totalItems = (results.chatPagination?.totalItems || 0) + (results.messagePagination?.totalItems || 0);
+    if (type === "all") {
+      const totalItems =
+        (results.chatPagination?.totalItems || 0) +
+        (results.messagePagination?.totalItems || 0);
       combinedPagination = {
         currentPage: page,
         totalPages: Math.ceil(totalItems / limit),
@@ -648,7 +692,10 @@ class ChatService {
       message: "Search results fetched successfully.",
       success: true,
       data: results,
-      pagination: combinedPagination || results.chatPagination || results.messagePagination,
+      pagination:
+        combinedPagination ||
+        results.chatPagination ||
+        results.messagePagination,
     };
   }
 
@@ -660,10 +707,22 @@ class ChatService {
       message: "AI models fetched successfully.",
       success: true,
       data: [
-        { id: "gpt-3.5-turbo", name: "GPT-3.5 Turbo", description: "Fast and efficient" },
+        {
+          id: "gpt-3.5-turbo",
+          name: "GPT-3.5 Turbo",
+          description: "Fast and efficient",
+        },
         { id: "gpt-4", name: "GPT-4", description: "Most capable model" },
-        { id: "gpt-4o", name: "GPT-4o", description: "Latest model with vision support" },
-        { id: "gpt-4o-mini", name: "GPT-4o Mini", description: "Faster and cheaper GPT-4o" },
+        {
+          id: "gpt-4o",
+          name: "GPT-4o",
+          description: "Latest model with vision support",
+        },
+        {
+          id: "gpt-4o-mini",
+          name: "GPT-4o Mini",
+          description: "Faster and cheaper GPT-4o",
+        },
       ],
     };
   }

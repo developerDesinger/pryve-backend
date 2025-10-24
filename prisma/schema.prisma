@@ -29,6 +29,15 @@ model User {
   dateOfBirth  DateTime?
   country      String?
   region       String?
+
+   
+  // AI Personality Configuration
+  systemPrompt        String?  // Core AI personality and behavior
+  systemPromptActive  Boolean  @default(false)
+  contextNeededMessage String? // Fallback message when more context is needed
+  contextNeededActive Boolean  @default(false)
+  technicalErrorMessage String? // Fallback message for technical errors
+  technicalErrorActive Boolean  @default(false)
   
   // Test field to demonstrate auto-sync
   phoneNumber  String?
@@ -235,4 +244,53 @@ model MediaLibrary {
   uploadedAt  DateTime @default(now())
   
   @@map("media_library")
+}
+
+model ToneProfile {
+  id                    String   @id @default(cuid())
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  // Basic Profile Info
+  name                  String
+  description           String
+  icon                  String
+  isActive              Boolean  @default(false)
+  
+  // Core Identity (Tone-specific)
+  coreIdentity          String
+  
+  // Safety Guidelines (Tone-specific)
+  safetyGuidelines      String[]
+  
+  // Tone Instructions (Tone-specific)
+  comfortingInstructions String
+  
+  // Tone Settings (Tone-specific)
+  maxWords              Int      @default(150)
+  responseStyle         String   @default("Conversational")
+  bannedWords           String[]
+  
+  // Mood-to-Tone Routing (Tone-specific)
+  moodToToneRouting     Json
+  
+  @@map("tone_profiles")
+}
+
+model EmotionalRule {
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Basic Rule Info
+  trigger       String   // e.g., "anxiety", "stress", "sadness"
+  responseType  String   // e.g., "Soft comfort tone", "Supportive response"
+  tone          String   // e.g., "Calm & reassuring", "Empathetic"
+  description   String   // Detailed description of the rule
+  
+  // Rule Settings
+  isActive      Boolean  @default(true)
+  priority      Int      @default(1) // Higher number = higher priority
+  
+  @@map("emotional_rules")
 }

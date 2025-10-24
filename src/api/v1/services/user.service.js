@@ -7,7 +7,6 @@ const { createJwtToken } = require("../middlewares/auth.middleware");
 const { s3SharpImageUpload } = require("../services/aws.service");
 const { sendEmail, sendForgotPasswordEmail } = require("../utils/email");
 
-
 class UserService {
   static async createUser(data) {
     const { email, fullName, profilePhoto } = data;
@@ -38,7 +37,7 @@ class UserService {
           profilePhoto,
           otp,
           otpCreatedAt: new Date(),
-        }
+        },
       });
     } else {
       // Create new user without password (will be set after OTP verification)
@@ -51,7 +50,7 @@ class UserService {
           otp,
           profilePhoto,
           otpCreatedAt: new Date(),
-        }
+        },
       });
     }
 
@@ -61,11 +60,14 @@ class UserService {
       await sendEmail({
         email: email,
         otp: otp,
-        subject: "Verify Your Email - Pryve"
+        subject: "Verify Your Email - Pryve",
       });
       console.log(`✅ [CREATE USER] OTP email sent successfully to: ${email}`);
     } catch (emailError) {
-      console.error(`❌ [CREATE USER] Failed to send OTP email to ${email}:`, emailError.message);
+      console.error(
+        `❌ [CREATE USER] Failed to send OTP email to ${email}:`,
+        emailError.message
+      );
       // Don't throw error here - user is created, just email failed
       // You might want to implement a retry mechanism or queue for failed emails
     }
@@ -78,11 +80,10 @@ class UserService {
         email: user.email,
         fullName: user.fullName,
         profilePhoto: user.profilePhoto,
-        status: user.status
-      }
+        status: user.status,
+      },
     };
   }
-
 
   static async updateUserAndProfile(userId, updateData) {
     // Prepare update data
@@ -96,7 +97,7 @@ class UserService {
     // Update user
     const updatedUser = await prisma.user.update({
       where: { id: userId },
-      data: updateFields
+      data: updateFields,
     });
 
     if (!updatedUser) {
@@ -143,12 +144,17 @@ class UserService {
 
     const updatedUser = await prisma.user.update({
       where: { id: user.id },
-      data: { status: "ACTIVE" }
+      data: { status: "ACTIVE" },
     });
 
     const token = createJwtToken({ id: user.id, role: user.role });
 
-    return { message: "OTP verified successfully.", success: true, user: updatedUser, token };
+    return {
+      message: "OTP verified successfully.",
+      success: true,
+      user: updatedUser,
+      token,
+    };
   }
 
   static async resendOtp(data) {
@@ -170,14 +176,17 @@ class UserService {
           id: user.id,
           email: user.email,
           fullName: user.fullName,
-          status: user.status
-        }
+          status: user.status,
+        },
       };
     }
 
     // Check if user is inactive (needs verification)
     if (user.status !== "INACTIVE") {
-      throw new AppError("User account is not in a state that requires OTP verification.", HttpStatusCodes.BAD_REQUEST);
+      throw new AppError(
+        "User account is not in a state that requires OTP verification.",
+        HttpStatusCodes.BAD_REQUEST
+      );
     }
 
     // Generate a 6-digit OTP
@@ -189,8 +198,8 @@ class UserService {
       where: { id: user.id },
       data: {
         otp,
-        otpCreatedAt: new Date()
-      }
+        otpCreatedAt: new Date(),
+      },
     });
 
     // Send OTP email
@@ -199,12 +208,18 @@ class UserService {
       await sendEmail({
         email: email,
         otp: otp,
-        subject: "Your Verification Code - Pryve"
+        subject: "Your Verification Code - Pryve",
       });
       console.log(`✅ [RESEND OTP] OTP email sent successfully to: ${email}`);
     } catch (emailError) {
-      console.error(`❌ [RESEND OTP] Failed to send OTP email to ${email}:`, emailError.message);
-      throw new AppError("Failed to send OTP email. Please try again.", HttpStatusCodes.INTERNAL_SERVER_ERROR);
+      console.error(
+        `❌ [RESEND OTP] Failed to send OTP email to ${email}:`,
+        emailError.message
+      );
+      throw new AppError(
+        "Failed to send OTP email. Please try again.",
+        HttpStatusCodes.INTERNAL_SERVER_ERROR
+      );
     }
 
     return {
@@ -214,8 +229,8 @@ class UserService {
         id: updatedUser.id,
         email: updatedUser.email,
         fullName: updatedUser.fullName,
-        status: updatedUser.status
-      }
+        status: updatedUser.status,
+      },
     };
   }
 
@@ -239,8 +254,8 @@ class UserService {
         profilePhoto: true,
         userName: true,
         createdAt: true,
-        updatedAt: true
-      }
+        updatedAt: true,
+      },
     });
     if (!user) {
       return {
@@ -311,14 +326,14 @@ class UserService {
           profilePhoto,
           firstName,
           lastName,
-        }
+        },
       });
     } else {
       // Update login type if different
       if (user.loginType !== provider) {
         user = await prisma.user.update({
           where: { id: user.id },
-          data: { loginType: provider }
+          data: { loginType: provider },
         });
       }
 
@@ -336,23 +351,38 @@ class UserService {
       message: "Social login successful.",
       success: true,
       user,
-      token
+      token,
     };
   }
 
-  static async getAllUsers(query) {
+  static async getAllUsersService(query) {
     const page = parseInt(query.page) || 1;
     const limit = parseInt(query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    const totalUsers = await prisma.user.count({ where: { status: "ACTIVE" } });
-    const totalPages = Math.ceil(totalUsers / limit);
+    // Global counts for dashboard
+    const [statusGroups, totalUsersAll] = await Promise.all([
+      prisma.user.groupBy({ by: ["status"], _count: { _all: true } }),
+      prisma.user.count(),
+    ]);
+    const statusCountMap = Object.fromEntries(
+      statusGroups.map((g) => [g.status, g._count._all])
+    );
+    const counts = {
+      totalUsers: totalUsersAll,
+      activeUsers: statusCountMap.ACTIVE || 0,
+      suspendedUsers: statusCountMap.SUSPENDED || 0, // change if your suspended status differs
+      premiumUsers: 0, // TODO: replace after confirming premium logic
+    };
+
+    const totalActiveUsers = statusCountMap.ACTIVE || 0;
+    const totalPages = Math.ceil(totalActiveUsers / limit);
 
     const users = await prisma.user.findMany({
       where: { status: "ACTIVE" },
       skip,
       take: limit,
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: "desc" },
     });
 
     if (!users || users.length === 0) {
@@ -360,12 +390,13 @@ class UserService {
         message: "No users found.",
         success: false,
         data: [],
+        counts, // added
         pagination: {
           currentPage: page,
           totalPages: 0,
           totalItems: 0,
-          limit
-        }
+          limit,
+        },
       };
     }
 
@@ -373,16 +404,15 @@ class UserService {
       message: "Users fetched successfully.",
       success: true,
       data: users,
+      counts, // added
       pagination: {
         currentPage: page,
         totalPages,
-        totalItems: totalUsers,
-        limit
-      }
+        totalItems: totalActiveUsers,
+        limit,
+      },
     };
   }
-
-
 
   static async getAllUsersByRole(role) {
     if (!role) {
@@ -404,7 +434,9 @@ class UserService {
       throw new AppError("userName is required.", HttpStatusCodes.BAD_REQUEST);
     }
     console.log("userName", userName);
-    const users = await prisma.user.findMany({ where: { userName: userName.userName } });
+    const users = await prisma.user.findMany({
+      where: { userName: userName.userName },
+    });
     console.log("Users found:", users);
     return {
       message: `User`,
@@ -413,12 +445,10 @@ class UserService {
     };
   }
 
-
-
   static async updateUser(userId, updateData) {
     const updatedUser = await prisma.user.update({
       where: { id: userId },
-      data: updateData
+      data: updateData,
     });
 
     if (!updatedUser) {
@@ -448,8 +478,8 @@ class UserService {
     const user = await prisma.user.findFirst({
       where: {
         id: userId,
-        status: "ACTIVE"
-      }
+        status: "ACTIVE",
+      },
     });
 
     if (!user) {
@@ -459,7 +489,7 @@ class UserService {
     // Soft delete by updating status to inactive
     await prisma.user.update({
       where: { id: userId },
-      data: { status: "INACTIVE" }
+      data: { status: "INACTIVE" },
     });
 
     return {
@@ -471,7 +501,9 @@ class UserService {
   static async forgotPassword(data) {
     const { email } = data;
 
-    console.log(`🔐 [FORGOT PASSWORD] Processing forgot password for email: ${email}`);
+    console.log(
+      `🔐 [FORGOT PASSWORD] Processing forgot password for email: ${email}`
+    );
 
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
@@ -486,22 +518,32 @@ class UserService {
       where: { id: user.id },
       data: {
         otp,
-        otpCreatedAt: new Date()
-      }
+        otpCreatedAt: new Date(),
+      },
     });
 
     // Send forgot password email
     try {
-      console.log(`📧 [FORGOT PASSWORD] Sending forgot password email to: ${email}`);
+      console.log(
+        `📧 [FORGOT PASSWORD] Sending forgot password email to: ${email}`
+      );
       await sendForgotPasswordEmail({
         email: email,
         otp: otp,
-        subject: "Reset Your Password - Pryve"
+        subject: "Reset Your Password - Pryve",
       });
-      console.log(`✅ [FORGOT PASSWORD] Forgot password email sent successfully to: ${email}`);
+      console.log(
+        `✅ [FORGOT PASSWORD] Forgot password email sent successfully to: ${email}`
+      );
     } catch (emailError) {
-      console.error(`❌ [FORGOT PASSWORD] Failed to send forgot password email to ${email}:`, emailError.message);
-      throw new AppError("Failed to send password reset email. Please try again.", HttpStatusCodes.INTERNAL_SERVER_ERROR);
+      console.error(
+        `❌ [FORGOT PASSWORD] Failed to send forgot password email to ${email}:`,
+        emailError.message
+      );
+      throw new AppError(
+        "Failed to send password reset email. Please try again.",
+        HttpStatusCodes.INTERNAL_SERVER_ERROR
+      );
     }
 
     return {
@@ -522,8 +564,8 @@ class UserService {
     const user = await prisma.user.findFirst({
       where: {
         id: userId,
-        email
-      }
+        email,
+      },
     });
     if (!user) {
       throw new AppError("User not found.", HttpStatusCodes.BAD_REQUEST);
@@ -533,11 +575,15 @@ class UserService {
     const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: {
-        password: hashedPassword
-      }
+        password: hashedPassword,
+      },
     });
 
-    return { message: "Password updated successfully.", success: true, user: updatedUser };
+    return {
+      message: "Password updated successfully.",
+      success: true,
+      user: updatedUser,
+    };
   }
 
   static async changePassword({ userId, oldPassword, newPassword }) {
@@ -554,8 +600,8 @@ class UserService {
         role: true,
         status: true,
         createdAt: true,
-        updatedAt: true
-      }
+        updatedAt: true,
+      },
     });
     if (!user) {
       throw new AppError("User not found.", 404);
@@ -566,7 +612,7 @@ class UserService {
     }
     const updatedUser = await prisma.user.update({
       where: { id: userId },
-      data: { password: await bcrypt.hash(newPassword, 10) }
+      data: { password: await bcrypt.hash(newPassword, 10) },
     });
     return {
       message: "Password changed successfully.",
@@ -574,8 +620,6 @@ class UserService {
       user: updatedUser,
     };
   }
-
-
 
   static async updateProfile(userId, data) {
     try {
@@ -595,10 +639,12 @@ class UserService {
         country,
         region,
         phoneNumber,
-        bio
+        bio,
       } = data;
 
-      const userToUpdate = await prisma.user.findUnique({ where: { id: userId } });
+      const userToUpdate = await prisma.user.findUnique({
+        where: { id: userId },
+      });
       if (!userToUpdate) {
         throw new AppError("User not found.", HttpStatusCodes.NOT_FOUND);
       }
@@ -610,11 +656,14 @@ class UserService {
         const emailExists = await prisma.user.findFirst({
           where: {
             email,
-            id: { not: userId }
-          }
+            id: { not: userId },
+          },
         });
         if (emailExists) {
-          throw new AppError("Email already exists. Please use another email.", HttpStatusCodes.BAD_REQUEST);
+          throw new AppError(
+            "Email already exists. Please use another email.",
+            HttpStatusCodes.BAD_REQUEST
+          );
         }
         updates.email = email;
       }
@@ -637,11 +686,14 @@ class UserService {
         const existingUser = await prisma.user.findFirst({
           where: {
             userName,
-            id: { not: userId }
-          }
+            id: { not: userId },
+          },
         });
         if (existingUser) {
-          throw new AppError("Username already taken.", HttpStatusCodes.BAD_REQUEST);
+          throw new AppError(
+            "Username already taken.",
+            HttpStatusCodes.BAD_REQUEST
+          );
         }
         updates.userName = userName;
       }
@@ -653,7 +705,8 @@ class UserService {
 
       // Additional profile fields
       if (gender !== undefined) updates.gender = gender.toUpperCase();
-      if (dateOfBirth !== undefined) updates.dateOfBirth = new Date(dateOfBirth);
+      if (dateOfBirth !== undefined)
+        updates.dateOfBirth = new Date(dateOfBirth);
       if (country !== undefined) updates.country = country;
       if (region !== undefined) updates.region = region;
       if (phoneNumber !== undefined) updates.phoneNumber = phoneNumber;
@@ -662,20 +715,20 @@ class UserService {
       if (Object.keys(updates).length > 0) {
         const updatedUser = await prisma.user.update({
           where: { id: userId },
-          data: updates
+          data: updates,
         });
 
         return {
           message: "Profile updated successfully.",
           success: true,
-          user: updatedUser
+          user: updatedUser,
         };
       }
 
       return {
         message: "No changes to update.",
         success: true,
-        user: userToUpdate
+        user: userToUpdate,
       };
     } catch (error) {
       throw new AppError(
@@ -685,8 +738,7 @@ class UserService {
     }
   }
 
-
-
+  // ...existing code...
   static async getUserByToken(userId) {
     const user = await prisma.user.findUnique({ where: { id: userId } });
 
@@ -698,8 +750,6 @@ class UserService {
       success: true,
     };
   }
-
-
 }
 
 module.exports = UserService;

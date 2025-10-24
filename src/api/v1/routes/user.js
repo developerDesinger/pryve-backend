@@ -15,9 +15,12 @@ router.post("/change-password", isAuthenticated, UserController.changePassword);
 
 // Profile management routes
 
-router.get("/", UserController.getAllUsers);
+router.get("/get-all", UserController.getAllUsers);
 router.get("/:id", UserController.getUser);
 router.delete("/:id", UserController.deleteUser);
-router.patch("/update-profile/:id", isAuthenticated, UserController.updateProfile);
-
+router.patch(
+  "/update-profile/:id",
+  isAuthenticated,
+  UserController.updateProfile
+);
 module.exports = router;

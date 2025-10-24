@@ -7,7 +7,6 @@ class UserController {
     return res.status(201).json(result);
   });
 
-
   static updateUserAndProfile = catchAsyncHandler(async (req, res) => {
     console.log("userId", req.user);
     const { id } = req.user; // Get user id from token
@@ -25,7 +24,6 @@ class UserController {
     const result = await UserService.verifyOtp(req.body);
     return res.status(200).json(result);
   });
-
 
   static resendOtp = catchAsyncHandler(async (req, res) => {
     const result = await UserService.resendOtp(req.body);
@@ -48,19 +46,15 @@ class UserController {
     return res.status(200).json(users);
   });
 
-
   static getUserByUserName = catchAsyncHandler(async (req, res) => {
     const users = await UserService.getUserByUserName(req.body);
     return res.status(200).json(users);
   });
 
-
   static getUserPageByUserName = catchAsyncHandler(async (req, res) => {
     const users = await UserService.getUserPageByUserName(req.body);
     return res.status(200).json(users);
   });
-
-
 
   static getAllUsersByRole = catchAsyncHandler(async (req, res) => {
     const result = await UserService.getAllUsersByRole(req.body);
@@ -104,15 +98,15 @@ class UserController {
   static updateProfile = catchAsyncHandler(async (req, res) => {
     const { id } = req.params;
     const { id: userId } = req.user; // Get user ID from token
-    
+
     // Ensure user can only update their own profile
     if (id !== userId) {
       return res.status(403).json({
         message: "You can only update your own profile.",
-        success: false
+        success: false,
       });
     }
-    
+
     const result = await UserService.updateProfile(id, req.body);
     return res.status(200).json(result);
   });
@@ -120,11 +114,18 @@ class UserController {
   static changePassword = catchAsyncHandler(async (req, res) => {
     const { oldPassword, newPassword } = req.body;
     const { id: userId } = req.user;
-    const result = await UserService.changePassword({ userId, oldPassword, newPassword });
+    const result = await UserService.changePassword({
+      userId,
+      oldPassword,
+      newPassword,
+    });
     return res.status(200).json(result);
   });
 
-
+  static getAllUsers = catchAsyncHandler(async (req, res) => {
+    const result = await UserService.getAllUsersService(req.query);
+    return res.status(200).json(result);
+  });
 }
 
 module.exports = UserController;
