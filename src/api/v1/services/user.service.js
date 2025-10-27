@@ -255,11 +255,20 @@ class UserService {
         userName: true,
         createdAt: true,
         updatedAt: true,
+        isDeleted: true,
       },
     });
     if (!user) {
       return {
         message: "Invalid email or password.",
+        success: false,
+      };
+    }
+
+    // Check if account is deleted
+    if (user.isDeleted) {
+      return {
+        message: "This account has been deleted.",
         success: false,
       };
     }
@@ -344,6 +353,14 @@ class UserService {
           HttpStatusCodes.UNAUTHORIZED
         );
       }
+
+      // Check if account is deleted
+      if (user.isDeleted) {
+        throw new AppError(
+          "This account has been deleted.",
+          HttpStatusCodes.UNAUTHORIZED
+        );
+      }
     }
 
     const token = createJwtToken({ id: user.id, role: user.role });
@@ -379,7 +396,10 @@ class UserService {
     const totalPages = Math.ceil(totalActiveUsers / limit);
 
     const users = await prisma.user.findMany({
-      where: { status: "ACTIVE" },
+      where: { 
+        status: "ACTIVE",
+        isDeleted: false
+      },
       skip,
       take: limit,
       orderBy: { createdAt: "desc" },
@@ -496,6 +516,81 @@ class UserService {
       message: "user deactivated successfully",
       success: true,
     };
+  }
+
+  static async deleteOwnAccount(userId) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        chats: true,
+        mediaLibrary: true,
+      },
+    });
+
+    if (!user) {
+      throw new AppError("User not found", HttpStatusCodes.NOT_FOUND);
+    }
+
+    // Check if already deleted
+    if (user.isDeleted) {
+      throw new AppError("Account already deleted", HttpStatusCodes.BAD_REQUEST);
+    }
+
+    try {
+      const now = new Date();
+
+      // Soft delete all related data in a transaction
+      await prisma.$transaction(async (tx) => {
+        // Mark user as deleted
+        await tx.user.update({
+          where: { id: userId },
+          data: {
+            isDeleted: true,
+            deletedAt: now,
+            status: "INACTIVE",
+          },
+        });
+
+        // Mark all chats as deleted
+        await tx.chat.updateMany({
+          where: { userId },
+          data: {
+            isDeleted: true,
+            deletedAt: now,
+            isActive: false,
+          },
+        });
+
+        // Mark all messages as deleted
+        await tx.message.updateMany({
+          where: { senderId: userId },
+          data: {
+            isDeleted: true,
+            deletedAt: now,
+          },
+        });
+
+        // Mark all media files as deleted
+        await tx.mediaLibrary.updateMany({
+          where: { userId },
+          data: {
+            isDeleted: true,
+            deletedAt: now,
+          },
+        });
+      });
+
+      return {
+        message: "Account deleted successfully.",
+        success: true,
+      };
+    } catch (error) {
+      console.error("Error deleting account:", error);
+      throw new AppError(
+        "Failed to delete account. Please try again.",
+        HttpStatusCodes.INTERNAL_SERVER_ERROR
+      );
+    }
   }
 
   static async forgotPassword(data) {

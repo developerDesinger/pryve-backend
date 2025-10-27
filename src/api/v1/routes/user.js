@@ -12,6 +12,7 @@ router.post("/resend-otp", UserController.resendOtp);
 router.post("/forgot-password", UserController.forgotPassword);
 router.post("/update-password", UserController.updatePassword);
 router.post("/change-password", isAuthenticated, UserController.changePassword);
+router.delete("/delete-account", isAuthenticated, UserController.deleteOwnAccount);
 
 // Profile management routes
 

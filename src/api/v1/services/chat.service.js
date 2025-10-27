@@ -758,6 +758,446 @@ class ChatService {
       ],
     };
   }
+
+  /**
+   * Add message to favorites
+   * POST /api/v1/chats/:chatId/messages/:messageId/favorite
+   */
+  static async addToFavorites(chatId, messageId, userId) {
+    // Verify message exists and belongs to user's chat
+    const message = await prisma.message.findFirst({
+      where: { id: messageId, chatId },
+      include: { chat: true },
+    });
+
+    if (!message) {
+      throw new AppError("Message not found.", HttpStatusCodes.NOT_FOUND);
+    }
+
+    // Verify chat belongs to user
+    if (message.chat.userId !== userId) {
+      throw new AppError("Unauthorized access.", HttpStatusCodes.FORBIDDEN);
+    }
+
+    // Check if already favorited
+    const existingFavorite = await prisma.userMessageFavorite.findUnique({
+      where: {
+        messageId_userId: {
+          messageId,
+          userId,
+        },
+      },
+    });
+
+    if (existingFavorite) {
+      return {
+        message: "Message already in favorites.",
+        success: true,
+        isFavorite: true,
+      };
+    }
+
+    // Add to favorites
+    await prisma.userMessageFavorite.create({
+      data: {
+        messageId,
+        userId,
+      },
+    });
+
+    return {
+      message: "Message added to favorites.",
+      success: true,
+      isFavorite: true,
+    };
+  }
+
+  /**
+   * Remove message from favorites
+   * DELETE /api/v1/chats/:chatId/messages/:messageId/favorite
+   */
+  static async removeFromFavorites(chatId, messageId, userId) {
+    // Verify message exists and belongs to user's chat
+    const message = await prisma.message.findFirst({
+      where: { id: messageId, chatId },
+      include: { chat: true },
+    });
+
+    if (!message) {
+      throw new AppError("Message not found.", HttpStatusCodes.NOT_FOUND);
+    }
+
+    // Verify chat belongs to user
+    if (message.chat.userId !== userId) {
+      throw new AppError("Unauthorized access.", HttpStatusCodes.FORBIDDEN);
+    }
+
+    // Check if favorited
+    const existingFavorite = await prisma.userMessageFavorite.findUnique({
+      where: {
+        messageId_userId: {
+          messageId,
+          userId,
+        },
+      },
+    });
+
+    if (!existingFavorite) {
+      return {
+        message: "Message not in favorites.",
+        success: true,
+        isFavorite: false,
+      };
+    }
+
+    // Remove from favorites
+    await prisma.userMessageFavorite.delete({
+      where: {
+        messageId_userId: {
+          messageId,
+          userId,
+        },
+      },
+    });
+
+    return {
+      message: "Message removed from favorites.",
+      success: true,
+      isFavorite: false,
+    };
+  }
+
+  /**
+   * Toggle message favorite status
+   * POST /api/v1/chats/:chatId/messages/:messageId/toggle-favorite
+   */
+  static async toggleFavorite(chatId, messageId, userId) {
+    // Verify message exists and belongs to user's chat
+    const message = await prisma.message.findFirst({
+      where: { id: messageId, chatId },
+      include: { chat: true },
+    });
+
+    if (!message) {
+      throw new AppError("Message not found.", HttpStatusCodes.NOT_FOUND);
+    }
+
+    // Verify chat belongs to user
+    if (message.chat.userId !== userId) {
+      throw new AppError("Unauthorized access.", HttpStatusCodes.FORBIDDEN);
+    }
+
+    // Check if already favorited
+    const existingFavorite = await prisma.userMessageFavorite.findUnique({
+      where: {
+        messageId_userId: {
+          messageId,
+          userId,
+        },
+      },
+    });
+
+    if (existingFavorite) {
+      // Remove from favorites
+      await prisma.userMessageFavorite.delete({
+        where: {
+          messageId_userId: {
+            messageId,
+            userId,
+          },
+        },
+      });
+
+      return {
+        message: "Message removed from favorites.",
+        success: true,
+        isFavorite: false,
+      };
+    } else {
+      // Add to favorites
+      await prisma.userMessageFavorite.create({
+        data: {
+          messageId,
+          userId,
+        },
+      });
+
+      return {
+        message: "Message added to favorites.",
+        success: true,
+        isFavorite: true,
+      };
+    }
+  }
+
+  /**
+   * Get all favorite messages for a user
+   * GET /api/v1/favorites/messages
+   */
+  static async getFavoriteMessages(userId, query) {
+    const page = parseInt(query.page) || 1;
+    const limit = parseInt(query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    const totalFavorites = await prisma.userMessageFavorite.count({
+      where: { userId },
+    });
+
+    const favorites = await prisma.userMessageFavorite.findMany({
+      where: { userId },
+      skip,
+      take: limit,
+      orderBy: { createdAt: "desc" },
+      include: {
+        message: {
+          include: {
+            sender: {
+              select: {
+                id: true,
+                fullName: true,
+                profilePhoto: true,
+                userName: true,
+              },
+            },
+            chat: {
+              select: {
+                id: true,
+                name: true,
+                type: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return {
+      message: "Favorite messages fetched successfully.",
+      success: true,
+      data: favorites.map((fav) => fav.message),
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalFavorites / limit),
+        totalItems: totalFavorites,
+        limit,
+      },
+    };
+  }
+
+  /**
+   * Get favorite messages for a specific chat
+   * GET /api/v1/chats/:chatId/favorites
+   */
+  static async getChatFavorites(chatId, userId, query) {
+    const page = parseInt(query.page) || 1;
+    const limit = parseInt(query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    // Verify chat belongs to user
+    const chat = await prisma.chat.findFirst({
+      where: { id: chatId, userId },
+    });
+
+    if (!chat) {
+      throw new AppError("Chat not found.", HttpStatusCodes.NOT_FOUND);
+    }
+
+    const totalFavorites = await prisma.userMessageFavorite.count({
+      where: { userId, message: { chatId } },
+    });
+
+    const favorites = await prisma.userMessageFavorite.findMany({
+      where: { userId, message: { chatId } },
+      skip,
+      take: limit,
+      orderBy: { createdAt: "desc" },
+      include: {
+        message: {
+          include: {
+            sender: {
+              select: {
+                id: true,
+                fullName: true,
+                profilePhoto: true,
+                userName: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return {
+      message: "Favorite messages fetched successfully.",
+      success: true,
+      data: favorites.map((fav) => fav.message),
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalFavorites / limit),
+        totalItems: totalFavorites,
+        limit,
+      },
+    };
+  }
+
+  /**
+   * Get journey page data for user
+   * GET /api/v1/journey
+   */
+  static async getJourneyPageData(userId, query) {
+    const favoriteLimit = parseInt(query.favoriteLimit) || 10;
+    const chatLimit = parseInt(query.chatLimit) || 5;
+    const messageLimit = parseInt(query.messageLimit) || 10;
+
+    try {
+      // Get user data
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          profilePhoto: true,
+          userName: true,
+          bio: true,
+          createdAt: true,
+        },
+      });
+
+      if (!user) {
+        throw new AppError("User not found.", HttpStatusCodes.NOT_FOUND);
+      }
+
+      // Get favorite messages
+      const favoriteMessages = await prisma.userMessageFavorite.findMany({
+        where: { userId },
+        take: favoriteLimit,
+        orderBy: { createdAt: "desc" },
+        include: {
+          message: {
+            include: {
+              sender: {
+                select: {
+                  id: true,
+                  fullName: true,
+                  profilePhoto: true,
+                  userName: true,
+                },
+              },
+              chat: {
+                select: {
+                  id: true,
+                  name: true,
+                  type: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      // Get recent chats
+      const recentChats = await prisma.chat.findMany({
+        where: {
+          userId,
+          isDeleted: false,
+        },
+        take: chatLimit,
+        orderBy: { updatedAt: "desc" },
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          type: true,
+          createdAt: true,
+          updatedAt: true,
+          lastMessage: true,
+          lastMessageAt: true,
+          messageCount: true,
+        },
+      });
+
+      // Get recent messages across all chats
+      const recentMessages = await prisma.message.findMany({
+        where: {
+          chat: {
+            userId,
+            isDeleted: false,
+          },
+          isDeleted: false,
+        },
+        take: messageLimit,
+        orderBy: { createdAt: "desc" },
+        include: {
+          chat: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+            },
+          },
+          sender: {
+            select: {
+              id: true,
+              fullName: true,
+              profilePhoto: true,
+              userName: true,
+            },
+          },
+        },
+      });
+
+      // Get statistics
+      const [
+        totalChats,
+        totalMessages,
+        totalFavorites,
+        totalMedia,
+      ] = await Promise.all([
+        prisma.chat.count({
+          where: { userId, isDeleted: false },
+        }),
+        prisma.message.count({
+          where: {
+            chat: { userId, isDeleted: false },
+            isDeleted: false,
+          },
+        }),
+        prisma.userMessageFavorite.count({
+          where: { userId },
+        }),
+        prisma.mediaLibrary.count({
+          where: { userId, isDeleted: false },
+        }),
+      ]);
+
+      return {
+        message: "Journey page data fetched successfully.",
+        success: true,
+        data: {
+          user,
+          favoriteMessages: favoriteMessages.map((fav) => ({
+            ...fav.message,
+            favoritedAt: fav.createdAt,
+          })),
+          recentChats,
+          recentMessages,
+          statistics: {
+            totalChats,
+            totalMessages,
+            totalFavorites,
+            totalMedia,
+          },
+        },
+      };
+    } catch (error) {
+      console.error("Error fetching journey page data:", error);
+      throw new AppError(
+        "Failed to fetch journey page data.",
+        HttpStatusCodes.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
 }
 
 module.exports = ChatService;

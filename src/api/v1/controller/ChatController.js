@@ -135,6 +135,70 @@ class ChatController {
     const result = await ChatService.getAvailableModels();
     return res.status(200).json(result);
   });
+
+  /**
+   * Add message to favorites
+   * POST /api/v1/chats/:chatId/messages/:messageId/favorite
+   */
+  static addToFavorites = catchAsyncHandler(async (req, res) => {
+    const { id: userId } = req.user;
+    const { chatId, messageId } = req.params;
+    const result = await ChatService.addToFavorites(chatId, messageId, userId);
+    return res.status(200).json(result);
+  });
+
+  /**
+   * Remove message from favorites
+   * DELETE /api/v1/chats/:chatId/messages/:messageId/favorite
+   */
+  static removeFromFavorites = catchAsyncHandler(async (req, res) => {
+    const { id: userId } = req.user;
+    const { chatId, messageId } = req.params;
+    const result = await ChatService.removeFromFavorites(chatId, messageId, userId);
+    return res.status(200).json(result);
+  });
+
+  /**
+   * Toggle message favorite status
+   * POST /api/v1/chats/:chatId/messages/:messageId/toggle-favorite
+   */
+  static toggleFavorite = catchAsyncHandler(async (req, res) => {
+    const { id: userId } = req.user;
+    const { chatId, messageId } = req.params;
+    const result = await ChatService.toggleFavorite(chatId, messageId, userId);
+    return res.status(200).json(result);
+  });
+
+  /**
+   * Get all favorite messages for a user
+   * GET /api/v1/favorites/messages
+   */
+  static getFavoriteMessages = catchAsyncHandler(async (req, res) => {
+    const { id: userId } = req.user;
+    const result = await ChatService.getFavoriteMessages(userId, req.query);
+    return res.status(200).json(result);
+  });
+
+  /**
+   * Get favorite messages for a specific chat
+   * GET /api/v1/chats/:chatId/favorites
+   */
+  static getChatFavorites = catchAsyncHandler(async (req, res) => {
+    const { id: userId } = req.user;
+    const { chatId } = req.params;
+    const result = await ChatService.getChatFavorites(chatId, userId, req.query);
+    return res.status(200).json(result);
+  });
+
+  /**
+   * Get journey page data
+   * GET /api/v1/journey
+   */
+  static getJourneyPageData = catchAsyncHandler(async (req, res) => {
+    const { id: userId } = req.user;
+    const result = await ChatService.getJourneyPageData(userId, req.query);
+    return res.status(200).json(result);
+  });
 }
 
 module.exports = ChatController;

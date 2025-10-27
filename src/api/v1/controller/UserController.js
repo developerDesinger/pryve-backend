@@ -142,6 +142,13 @@ class UserController {
     const result = await UserService.getAllUsersService(req.query);
     return res.status(200).json(result);
   });
+
+  static deleteOwnAccount = catchAsyncHandler(async (req, res) => {
+    const { id: userId } = req.user; // Get user ID from token
+    
+    const result = await UserService.deleteOwnAccount(userId);
+    return res.status(200).json(result);
+  });
 }
 
 module.exports = UserController;

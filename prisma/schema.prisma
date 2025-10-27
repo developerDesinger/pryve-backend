@@ -36,6 +36,10 @@ model User {
   
   // New field for testing update functionality
   bio          String?
+  
+  // Account deletion tracking
+  isDeleted    Boolean   @default(false)
+  deletedAt    DateTime?
 
   // Chat relationships
   chats            Chat[]
@@ -43,6 +47,7 @@ model User {
   messageReactions MessageReaction[]
   readReceipts     MessageReadReceipt[]
   mediaLibrary     MediaLibrary[]
+  favoriteMessages UserMessageFavorite[]
 
   @@map("users")
 }
@@ -57,6 +62,10 @@ model Chat {
   description String?
   type        ChatType @default(PERSONAL_AI)
   isActive    Boolean  @default(true)
+  
+  // Account deletion tracking
+  isDeleted    Boolean   @default(false)
+  deletedAt    DateTime?
   
   // Owner of the chat (one-to-one with user)
   userId      String
@@ -118,6 +127,9 @@ model Message {
   // Read receipts
   readReceipts MessageReadReceipt[]
   
+  // Message favorites
+  favoritedBy  UserMessageFavorite[]
+  
   // Message editing
   editedAt     DateTime?
   editedContent String?
@@ -131,6 +143,10 @@ model Message {
   // Emotion detection fields
   emotion      String?  // Detected emotion (joy, sadness, anger, fear, surprise, disgust, neutral)
   emotionConfidence Float? // Confidence score for emotion detection (0-1)
+  
+  // Account deletion tracking
+  isDeleted    Boolean   @default(false)
+  deletedAt    DateTime?
   
   @@map("messages")
 }
@@ -167,6 +183,21 @@ model MessageReadReceipt {
   
   @@unique([messageId, userId])
   @@map("message_read_receipts")
+}
+
+model UserMessageFavorite {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relationships
+  messageId String
+  userId    String
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([messageId, userId])
+  @@map("user_message_favorites")
 }
 
 enum Role {
@@ -238,6 +269,10 @@ model MediaLibrary {
   
   // Metadata
   uploadedAt  DateTime @default(now())
+  
+  // Account deletion tracking
+  isDeleted    Boolean   @default(false)
+  deletedAt    DateTime?
   
   @@map("media_library")
 }

@@ -40,6 +40,9 @@ const upload = multer({
 router.post("/", isAuthenticated, ChatController.createChat);
 router.get("/", isAuthenticated, ChatController.getUserChats);
 router.get("/search", isAuthenticated, ChatController.searchConversations);
+router.get("/ai/models", ChatController.getAvailableModels);
+router.get("/favorites/messages", isAuthenticated, ChatController.getFavoriteMessages);
+router.get("/journey", isAuthenticated, ChatController.getJourneyPageData);
 router.get("/:chatId", isAuthenticated, ChatController.getChatDetails);
 router.patch("/:chatId", isAuthenticated, ChatController.updateChat);
 router.delete("/:chatId", isAuthenticated, ChatController.deleteChat);
@@ -66,8 +69,11 @@ router.post("/:chatId/messages", isAuthenticated, (req, res, next) => {
 }, ChatController.sendMessage);
 router.get("/:chatId/messages", isAuthenticated, ChatController.getChatMessages);
 
-// AI Models Route
-router.get("/ai/models", ChatController.getAvailableModels);
+// Favorite Routes for specific chats and messages
+router.get("/:chatId/favorites", isAuthenticated, ChatController.getChatFavorites);
+router.post("/:chatId/messages/:messageId/favorite", isAuthenticated, ChatController.addToFavorites);
+router.delete("/:chatId/messages/:messageId/favorite", isAuthenticated, ChatController.removeFromFavorites);
+router.post("/:chatId/messages/:messageId/toggle-favorite", isAuthenticated, ChatController.toggleFavorite);
 
 // Test endpoint for file upload debugging
 router.post("/test-upload", isAuthenticated, (req, res, next) => {
