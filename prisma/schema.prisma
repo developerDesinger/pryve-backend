@@ -30,14 +30,6 @@ model User {
   country      String?
   region       String?
 
-   
-  // AI Personality Configuration
-  systemPrompt        String?  // Core AI personality and behavior
-  systemPromptActive  Boolean  @default(false)
-  contextNeededMessage String? // Fallback message when more context is needed
-  contextNeededActive Boolean  @default(false)
-  technicalErrorMessage String? // Fallback message for technical errors
-  technicalErrorActive Boolean  @default(false)
   
   // Test field to demonstrate auto-sync
   phoneNumber  String?
@@ -135,6 +127,10 @@ model Message {
   aiModel      String?  // Which AI model generated this response
   tokensUsed   Int?     // Number of tokens used for this message
   processingTime Int?   // Time taken to generate response in ms
+  
+  // Emotion detection fields
+  emotion      String?  // Detected emotion (joy, sadness, anger, fear, surprise, disgust, neutral)
+  emotionConfidence Float? // Confidence score for emotion detection (0-1)
   
   @@map("messages")
 }
@@ -293,4 +289,20 @@ model EmotionalRule {
   priority      Int      @default(1) // Higher number = higher priority
   
   @@map("emotional_rules")
+}
+
+model AIConfig {
+  id                    String   @id @default(cuid())
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  // AI Personality Configuration
+  systemPrompt          String?  // Core AI personality and behavior
+  systemPromptActive    Boolean  @default(false)
+  contextNeededMessage  String?  // Fallback message when more context is needed
+  contextNeededActive   Boolean  @default(false)
+  technicalErrorMessage String?  // Fallback message for technical errors
+  technicalErrorActive  Boolean  @default(false)
+  
+  @@map("ai_configs")
 }

@@ -31,6 +31,7 @@ class EmotionalRuleController {
    * POST /api/v1/emotional-rules
    */
   static createEmotionalRule = catchAsyncHandler(async (req, res) => {
+    console.log("req.body<><>><><>><>", req.body);
     const result = await EmotionalRuleService.createEmotionalRule(req.body);
     return res.status(201).json(result);
   });

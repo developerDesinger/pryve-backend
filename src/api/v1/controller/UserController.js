@@ -111,6 +111,22 @@ class UserController {
     return res.status(200).json(result);
   });
 
+  static updateUserAndProfileByAdmin = catchAsyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { id: userId } = req.user; // Get user ID from token
+
+    // Ensure user can only update their own profile
+    if (id !== userId) {
+      return res.status(403).json({
+        message: "You can only update your own profile.",
+        success: false,
+      });
+    }
+
+    const result = await UserService.updateUserAndProfile(id, req.body);
+    return res.status(200).json(result);
+  });
+
   static changePassword = catchAsyncHandler(async (req, res) => {
     const { oldPassword, newPassword } = req.body;
     const { id: userId } = req.user;

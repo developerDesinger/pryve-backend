@@ -60,7 +60,7 @@ class EmotionalRuleService {
       priority = 1,
       isActive = true,
     } = data;
-
+    console.log("data", data);
     // Validate required fields
     if (!trigger || !responseType || !tone || !description) {
       return {

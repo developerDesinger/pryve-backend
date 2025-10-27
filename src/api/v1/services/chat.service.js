@@ -3,6 +3,7 @@ const prisma = require("../../../lib/prisma");
 const AppError = require("../utils/AppError");
 const HttpStatusCodes = require("../enums/httpStatusCode");
 const MediaLibraryService = require("./mediaLibrary.service");
+const EmotionDetectionService = require("../utils/emotionDetection");
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -179,6 +180,12 @@ class ChatService {
       console.log("No file provided for upload");
     }
 
+    // Start emotion detection in parallel (non-blocking)
+    let emotionDetectionPromise = null;
+    if (content && content.trim().length > 0) {
+      emotionDetectionPromise = EmotionDetectionService.detectEmotion(content);
+    }
+
     // Create user message with file metadata
     const userMessage = await prisma.message.create({
       data: {
@@ -230,16 +237,16 @@ class ChatService {
     // Inject zodiac from user's birthday
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { birthday: true },
+      select: { dateOfBirth: true },
     });
-    const zodiac = getZodiacSign(user?.birthday);
+    const zodiac = getZodiacSign(user?.dateOfBirth);
     if (zodiac) {
       messages.unshift({ role: "system", content: `User Zodiac: ${zodiac} ` });
     }
-    if (user?.birthday) {
+    if (user?.dateOfBirth) {
       messages.unshift({
         role: "system",
-        content: `User Birthdate: ${user.birthday}`,
+        content: `User Birthdate: ${user.dateOfBirth}`,
       });
     }
     let aiResponse = null;
@@ -360,6 +367,31 @@ class ChatService {
         messageCount: { increment: 2 }, // User message + AI response
       },
     });
+
+    // Update user message with emotion detection results (non-blocking)
+    if (emotionDetectionPromise) {
+      emotionDetectionPromise
+        .then(async (emotionResult) => {
+          try {
+            await prisma.message.update({
+              where: { id: userMessage.id },
+              data: {
+                emotion: emotionResult.emotion,
+                emotionConfidence: emotionResult.confidence,
+              },
+            });
+            console.log(
+              `Emotion detected for message ${userMessage.id}:`,
+              emotionResult
+            );
+          } catch (error) {
+            console.error("Failed to update message with emotion:", error);
+          }
+        })
+        .catch((error) => {
+          console.error("Emotion detection failed:", error);
+        });
+    }
 
     return {
       message: "Message sent successfully.",

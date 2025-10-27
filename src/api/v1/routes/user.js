@@ -23,4 +23,9 @@ router.patch(
   isAuthenticated,
   UserController.updateProfile
 );
+router.patch(
+  "/update-user/:id",
+  isAuthenticated,
+  UserController.updateUserAndProfileByAdmin
+);
 module.exports = router;
