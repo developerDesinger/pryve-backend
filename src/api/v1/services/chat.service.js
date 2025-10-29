@@ -1048,6 +1048,7 @@ class ChatService {
     const favoriteLimit = parseInt(query.favoriteLimit) || 10;
     const chatLimit = parseInt(query.chatLimit) || 5;
     const messageLimit = parseInt(query.messageLimit) || 10;
+    const vaultLimit = parseInt(query.vaultLimit) || 20;
 
     try {
       // Get user data
@@ -1068,32 +1069,458 @@ class ChatService {
         throw new AppError("User not found.", HttpStatusCodes.NOT_FOUND);
       }
 
-      // Get favorite messages
-      const favoriteMessages = await prisma.userMessageFavorite.findMany({
-        where: { userId },
-        take: favoriteLimit,
-        orderBy: { createdAt: "desc" },
-        include: {
-          message: {
-            include: {
-              sender: {
-                select: {
-                  id: true,
-                  fullName: true,
-                  profilePhoto: true,
-                  userName: true,
-                },
-              },
-              chat: {
-                select: {
-                  id: true,
-                  name: true,
-                  type: true,
+      // Helper function to map emotions to UI tags
+      const getEmotionTag = (emotion, confidence = 0) => {
+        const emotionMap = {
+          joy: confidence >= 0.9 ? "Empowered" : "Joyful",
+          sadness: "Reflective",
+          anger: "Reflective",
+          fear: "Curious",
+          surprise: "Hopeful",
+          disgust: "Reflective",
+          neutral: "Reflective",
+        };
+        return emotionMap[emotion?.toLowerCase()] || "Reflective";
+      };
+
+      // Calculate all metrics in parallel
+      const [
+        // 1. Heart-to-hearts: Optimized query with aggregation
+        heartToHeartsResult,
+        // 2. Growth Moments: Direct count
+        growthMoments,
+        // 3. Breakthrough Days: Optimized with date grouping
+        breakthroughDaysData,
+        // 4. Statistics
+        totalChats,
+        totalMessages,
+        totalFavorites,
+        totalMedia,
+        // 5. Favorite messages for vault
+        favoriteMessages,
+      ] = await Promise.all([
+        // Heart-to-hearts: Count chats with >= 3 emotional messages
+        prisma.chat.findMany({
+          where: {
+            userId,
+            isDeleted: false,
+          },
+          select: {
+            id: true,
+            _count: {
+              select: {
+                messages: {
+                  where: {
+                    isDeleted: false,
+                    isFromAI: false,
+                    emotion: { not: null },
+                    emotionConfidence: { gte: 0.6 },
+                  },
                 },
               },
             },
           },
+        }),
+
+        // Growth Moments
+        prisma.message.count({
+          where: {
+            chat: { userId, isDeleted: false },
+            isDeleted: false,
+            isFromAI: false,
+            emotion: { in: ["joy", "surprise"] },
+            emotionConfidence: { gte: 0.7 },
+          },
+        }),
+
+        // Breakthrough Days: Get messages grouped by date
+        prisma.message.findMany({
+          where: {
+            chat: { userId, isDeleted: false },
+            isDeleted: false,
+            isFromAI: false,
+            emotion: { not: null },
+            emotionConfidence: { gte: 0.7 },
+          },
+          select: {
+            createdAt: true,
+            emotion: true,
+          },
+          // Limit to prevent memory issues
+          take: 1000,
+        }),
+
+        // Statistics
+        prisma.chat.count({
+          where: { userId, isDeleted: false },
+        }),
+        prisma.message.count({
+          where: {
+            chat: { userId, isDeleted: false },
+            isDeleted: false,
+          },
+        }),
+        prisma.userMessageFavorite.count({
+          where: { userId },
+        }),
+        prisma.mediaLibrary.count({
+          where: { userId, isDeleted: false },
+        }),
+
+        // Favorite messages for vault
+        prisma.userMessageFavorite.findMany({
+          where: { userId },
+          take: vaultLimit,
+          orderBy: { createdAt: "desc" },
+          include: {
+            message: {
+              include: {
+                sender: {
+                  select: {
+                    id: true,
+                    fullName: true,
+                    profilePhoto: true,
+                    userName: true,
+                  },
+                },
+                chat: {
+                  select: {
+                    id: true,
+                    name: true,
+                    type: true,
+                  },
+                },
+              },
+            },
+          },
+        }),
+      ]);
+
+      // Process heart-to-hearts
+      const heartToHearts = heartToHeartsResult.filter(
+        (chat) => chat._count.messages >= 3
+      ).length;
+
+      // Process breakthrough days (group by date)
+      const dailyEmotions = {};
+      breakthroughDaysData.forEach((msg) => {
+        const dateKey = new Date(msg.createdAt).toISOString().split("T")[0];
+        if (!dailyEmotions[dateKey]) {
+          dailyEmotions[dateKey] = {
+            count: 0,
+            positiveCount: 0,
+          };
+        }
+        dailyEmotions[dateKey].count += 1;
+        if (["joy", "surprise"].includes(msg.emotion)) {
+          dailyEmotions[dateKey].positiveCount += 1;
+        }
+      });
+
+      const breakthroughDays = Object.values(dailyEmotions).filter(
+        (day) => day.count >= 5 && day.positiveCount >= 2
+      ).length;
+
+      // Goals achieved (placeholder)
+      const goalsAchieved = 0;
+
+      // Weekly Journey: Fetch all messages at once, then process in memory
+      const currentDate = new Date();
+      const weeksSinceRegistration = Math.floor(
+        (currentDate - new Date(user.createdAt)) / (7 * 24 * 60 * 60 * 1000)
+      );
+
+      // Fetch messages for last 4 weeks in a single query
+      const fourWeeksAgo = new Date(currentDate);
+      fourWeeksAgo.setDate(currentDate.getDate() - 28);
+
+      const weeklyMessages = await prisma.message.findMany({
+        where: {
+          chat: { userId, isDeleted: false },
+          isDeleted: false,
+          isFromAI: false,
+          createdAt: { gte: fourWeeksAgo },
+          emotion: { not: null },
         },
+        select: {
+          emotion: true,
+          emotionConfidence: true,
+          createdAt: true,
+        },
+      });
+
+      // Process weekly data
+      const weeklyJourneys = [];
+      for (let i = 0; i < 4; i++) {
+        const weekEnd = new Date(currentDate);
+        const daysFromSunday = (currentDate.getDay() + 1) % 7;
+        weekEnd.setDate(currentDate.getDate() - i * 7 - daysFromSunday);
+        weekEnd.setHours(23, 59, 59, 999);
+
+        const weekStart = new Date(weekEnd);
+        weekStart.setDate(weekEnd.getDate() - 6);
+        weekStart.setHours(0, 0, 0, 0);
+
+        // Filter messages for this week
+        const weekMsgs = weeklyMessages.filter((msg) => {
+          const msgDate = new Date(msg.createdAt);
+          return msgDate >= weekStart && msgDate <= weekEnd;
+        });
+
+        const progress = Math.min(
+          100,
+          Math.floor((weekMsgs.length / 20) * 100)
+        );
+
+        // Get dominant emotion
+        const emotionCounts = {};
+        weekMsgs.forEach((msg) => {
+          if (msg.emotionConfidence >= 0.6) {
+            emotionCounts[msg.emotion] = (emotionCounts[msg.emotion] || 0) + 1;
+          }
+        });
+
+        let dominantEmotion = "neutral";
+        let maxCount = 0;
+        Object.entries(emotionCounts).forEach(([emotion, count]) => {
+          if (count > maxCount) {
+            maxCount = count;
+            dominantEmotion = emotion;
+          }
+        });
+
+        const emotionTag = getEmotionTag(
+          dominantEmotion,
+          weekMsgs.length > 0 ? maxCount / weekMsgs.length : 0
+        );
+
+        // Generate dynamic description based on week activity
+        const getWeekDescription = (
+          progress,
+          dominantEmotion,
+          weekMsgs,
+          weekNumber
+        ) => {
+          if (progress === 0) {
+            return "Starting your journey";
+          }
+
+          // First week - special messaging
+          if (weekNumber === 1) {
+            if (progress >= 75) {
+              return "Started strong with deep reflections";
+            } else if (progress >= 50) {
+              return "Began exploring your inner thoughts";
+            } else {
+              return "Took your first steps forward";
+            }
+          }
+
+          // Based on dominant emotion
+          const emotionDescriptions = {
+            joy:
+              progress >= 75
+                ? "Filled with joy and positive energy"
+                : progress >= 50
+                ? "Experiencing moments of happiness"
+                : "Finding reasons to smile",
+
+            surprise:
+              progress >= 75
+                ? "Discovering unexpected insights about yourself"
+                : progress >= 50
+                ? "Encountering eye-opening realizations"
+                : "Noticing new perspectives emerging",
+
+            sadness:
+              progress >= 75
+                ? "Processing deep emotions with courage"
+                : progress >= 50
+                ? "Working through challenging feelings"
+                : "Allowing yourself to feel and heal",
+
+            fear:
+              progress >= 75
+                ? "Confronting fears and building resilience"
+                : progress >= 50
+                ? "Facing anxieties with determination"
+                : "Taking small steps despite uncertainty",
+
+            anger:
+              progress >= 75
+                ? "Channeling energy into positive growth"
+                : progress >= 50
+                ? "Expressing and understanding your needs"
+                : "Acknowledging strong feelings",
+
+            reflective:
+              progress >= 75
+                ? "Engaging in deep self-reflection"
+                : progress >= 50
+                ? "Taking time for introspection"
+                : "Beginning to understand yourself better",
+
+            neutral:
+              progress >= 75
+                ? "Maintaining steady progress and consistency"
+                : progress >= 50
+                ? "Building a steady rhythm of reflection"
+                : "Establishing a practice of self-exploration",
+          };
+
+          // Check if emotion tag matches any key
+          const emotionKey =
+            emotionTag.toLowerCase() === "reflective"
+              ? "reflective"
+              : emotionTag.toLowerCase() === "curious"
+              ? "neutral"
+              : emotionTag.toLowerCase() === "hopeful"
+              ? "surprise"
+              : emotionTag.toLowerCase() === "empowered"
+              ? "joy"
+              : dominantEmotion || "neutral";
+
+          return (
+            emotionDescriptions[emotionKey] ||
+            (progress >= 75
+              ? "Showing strong commitment to growth"
+              : progress >= 50
+              ? "Making steady progress on your path"
+              : "Continuing your journey of self-discovery")
+          );
+        };
+
+        const weekNumber = weeksSinceRegistration - i;
+        if (weekNumber >= 0) {
+          const description = getWeekDescription(
+            progress,
+            dominantEmotion,
+            weekMsgs,
+            weekNumber + 1
+          );
+
+          weeklyJourneys.push({
+            weekNumber: weekNumber + 1,
+            title: `Week ${weekNumber + 1}`,
+            description,
+            progress,
+            progressText: `Progress: ${progress}% complete`,
+            emotionTag,
+            startDate: weekStart,
+            endDate: weekEnd,
+          });
+        }
+      }
+
+      weeklyJourneys.sort((a, b) => b.weekNumber - a.weekNumber);
+
+      // Vault of Secrets: Optimize AI response fetching
+      const favoriteChatIds = [
+        ...new Set(favoriteMessages.map((fav) => fav.message.chatId)),
+      ];
+      const favoriteMessageDates = new Map(
+        favoriteMessages.map((fav) => [
+          fav.message.id,
+          new Date(fav.message.createdAt),
+        ])
+      );
+
+      // Fetch AI responses efficiently
+      const aiResponses =
+        favoriteChatIds.length > 0
+          ? await prisma.message.findMany({
+              where: {
+                chatId: { in: favoriteChatIds },
+                isFromAI: true,
+                isDeleted: false,
+                createdAt: {
+                  gte:
+                    favoriteMessageDates.size > 0
+                      ? new Date(
+                          Math.min(...Array.from(favoriteMessageDates.values()))
+                        )
+                      : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+                },
+              },
+              select: {
+                id: true,
+                content: true,
+                createdAt: true,
+                chatId: true,
+              },
+              orderBy: { createdAt: "asc" },
+            })
+          : [];
+
+      // Create AI response map by chat and date
+      const aiResponseMap = new Map();
+      favoriteMessages.forEach((fav) => {
+        const favMsg = fav.message;
+        // Find first AI response after this message in the same chat
+        const aiResponse = aiResponses.find(
+          (ai) =>
+            ai.chatId === favMsg.chatId &&
+            new Date(ai.createdAt) > favoriteMessageDates.get(favMsg.id)
+        );
+        if (aiResponse) {
+          aiResponseMap.set(favMsg.id, aiResponse.content);
+        }
+      });
+
+      // Format vault entries
+      const vaultOfSecrets = favoriteMessages.map((fav) => {
+        const msg = fav.message;
+        const aiInsight = aiResponseMap.get(msg.id);
+
+        // Generate insight text
+        let insightText = null;
+        if (aiInsight) {
+          if (aiInsight.length <= 100) {
+            insightText = aiInsight;
+          } else {
+            // Use emotion-based insight
+            const insights = {
+              joy: "You're learning to advocate for yourself with confidence✨",
+              surprise: "You're discovering new perspectives about yourself✨",
+              sadness: "You're processing your feelings with courage✨",
+              fear: "You're showing bravery by facing your concerns✨",
+              anger: "You're expressing your needs authentically✨",
+              neutral: "You're reflecting on your experiences✨",
+            };
+            insightText =
+              insights[msg.emotion?.toLowerCase()] || insights.neutral;
+          }
+        } else {
+          const defaultInsights = {
+            joy: "You're learning to advocate for yourself with confidence✨",
+            surprise: "You're discovering new perspectives about yourself✨",
+            sadness: "You're processing your feelings with courage✨",
+            fear: "You're showing bravery by facing your concerns✨",
+            neutral: "You're reflecting on your experiences✨",
+          };
+          insightText =
+            defaultInsights[msg.emotion?.toLowerCase()] ||
+            defaultInsights.neutral;
+        }
+
+        const emotionTag = getEmotionTag(
+          msg.emotion,
+          msg.emotionConfidence || 0
+        );
+
+        return {
+          id: msg.id,
+          emotionTag,
+          date: msg.createdAt,
+          content: msg.content,
+          attribution: msg.chat.name || "Pryve",
+          aiInsight: insightText,
+          chatId: msg.chat.id,
+          chatName: msg.chat.name,
+          favoritedAt: fav.createdAt,
+          emotion: msg.emotion,
+          emotionConfidence: msg.emotionConfidence,
+        };
       });
 
       // Get recent chats
@@ -1117,76 +1544,29 @@ class ChatService {
         },
       });
 
-      // Get recent messages across all chats
-      const recentMessages = await prisma.message.findMany({
-        where: {
-          chat: {
-            userId,
-            isDeleted: false,
-          },
-          isDeleted: false,
-        },
-        take: messageLimit,
-        orderBy: { createdAt: "desc" },
-        include: {
-          chat: {
-            select: {
-              id: true,
-              name: true,
-              type: true,
-            },
-          },
-          sender: {
-            select: {
-              id: true,
-              fullName: true,
-              profilePhoto: true,
-              userName: true,
-            },
-          },
-        },
-      });
-
-      // Get statistics
-      const [
-        totalChats,
-        totalMessages,
-        totalFavorites,
-        totalMedia,
-      ] = await Promise.all([
-        prisma.chat.count({
-          where: { userId, isDeleted: false },
-        }),
-        prisma.message.count({
-          where: {
-            chat: { userId, isDeleted: false },
-            isDeleted: false,
-          },
-        }),
-        prisma.userMessageFavorite.count({
-          where: { userId },
-        }),
-        prisma.mediaLibrary.count({
-          where: { userId, isDeleted: false },
-        }),
-      ]);
-
       return {
         message: "Journey page data fetched successfully.",
         success: true,
         data: {
           user,
-          favoriteMessages: favoriteMessages.map((fav) => ({
-            ...fav.message,
-            favoritedAt: fav.createdAt,
-          })),
+          journeyOverview: {
+            heartToHearts,
+            growthMoments,
+            breakthroughDays,
+            goalsAchieved,
+          },
+          weeklyJourney: weeklyJourneys,
+          vaultOfSecrets,
           recentChats,
-          recentMessages,
           statistics: {
             totalChats,
             totalMessages,
             totalFavorites,
             totalMedia,
+            heartToHearts,
+            growthMoments,
+            breakthroughDays,
+            goalsAchieved,
           },
         },
       };
