@@ -1,0 +1,324 @@
+{
+  "info": {
+    "name": "Pryve - Favorites & Journey Page",
+    "description": "Postman collection for Message Favorites, Journey Page, and Account Deletion APIs",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "pryve-api"
+  },
+  "item": [
+    {
+      "name": "Favorites Management",
+      "item": [
+        {
+          "name": "Add Message to Favorites",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chats/:chatId/messages/:messageId/favorite",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chats", ":chatId", "messages", ":messageId", "favorite"],
+              "variable": [
+                {
+                  "key": "chatId",
+                  "value": "your-chat-id",
+                  "description": "The ID of the chat containing the message"
+                },
+                {
+                  "key": "messageId",
+                  "value": "your-message-id",
+                  "description": "The ID of the message to favorite"
+                }
+              ]
+            },
+            "description": "Adds a message to the authenticated user's favorites"
+          },
+          "response": []
+        },
+        {
+          "name": "Remove Message from Favorites",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chats/:chatId/messages/:messageId/favorite",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chats", ":chatId", "messages", ":messageId", "favorite"],
+              "variable": [
+                {
+                  "key": "chatId",
+                  "value": "your-chat-id",
+                  "description": "The ID of the chat containing the message"
+                },
+                {
+                  "key": "messageId",
+                  "value": "your-message-id",
+                  "description": "The ID of the message to unfavorite"
+                }
+              ]
+            },
+            "description": "Removes a message from the authenticated user's favorites"
+          },
+          "response": []
+        },
+        {
+          "name": "Toggle Message Favorite",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chats/:chatId/messages/:messageId/toggle-favorite",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chats", ":chatId", "messages", ":messageId", "toggle-favorite"],
+              "variable": [
+                {
+                  "key": "chatId",
+                  "value": "your-chat-id",
+                  "description": "The ID of the chat containing the message"
+                },
+                {
+                  "key": "messageId",
+                  "value": "your-message-id",
+                  "description": "The ID of the message to toggle"
+                }
+              ]
+            },
+            "description": "Toggles the favorite status of a message"
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Favorite Messages",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chats/favorites/messages?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chats", "favorites", "messages"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number (default: 1)"
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Number of items per page (default: 20)"
+                }
+              ]
+            },
+            "description": "Retrieves all favorite messages for the authenticated user across all chats"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Chat Favorite Messages",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chats/:chatId/favorites?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chats", ":chatId", "favorites"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number (default: 1)"
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Number of items per page (default: 20)"
+                }
+              ],
+              "variable": [
+                {
+                  "key": "chatId",
+                  "value": "your-chat-id",
+                  "description": "The ID of the chat"
+                }
+              ]
+            },
+            "description": "Retrieves favorite messages within a specific chat"
+          },
+          "response": []
+        }
+      ],
+      "description": "Manage message favorites - add, remove, toggle, and view favorites"
+    },
+    {
+      "name": "Journey Page",
+      "item": [
+        {
+          "name": "Get Journey Page Data (Default)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chats/journey",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chats", "journey"]
+            },
+            "description": "Get journey page data with default limits (10 favorites, 5 chats, 10 messages)"
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/chats/journey",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "chats", "journey"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "body": "{\n  \"message\": \"Journey page data fetched successfully.\",\n  \"success\": true,\n  \"data\": {\n    \"user\": {\n      \"id\": \"user123\",\n      \"fullName\": \"John Doe\",\n      \"email\": \"john@example.com\",\n      \"profilePhoto\": \"https://...\",\n      \"userName\": \"johndoe\",\n      \"bio\": \"I love using AI!\",\n      \"createdAt\": \"2024-01-01T00:00:00Z\"\n    },\n    \"favoriteMessages\": [],\n    \"recentChats\": [],\n    \"recentMessages\": [],\n    \"statistics\": {\n      \"totalChats\": 0,\n      \"totalMessages\": 0,\n      \"totalFavorites\": 0,\n      \"totalMedia\": 0\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Journey Page Data (Custom Limits)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chats/journey?favoriteLimit=20&chatLimit=10&messageLimit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chats", "journey"],
+              "query": [
+                {
+                  "key": "favoriteLimit",
+                  "value": "20",
+                  "description": "Number of favorite messages to return"
+                },
+                {
+                  "key": "chatLimit",
+                  "value": "10",
+                  "description": "Number of recent chats to return"
+                },
+                {
+                  "key": "messageLimit",
+                  "value": "20",
+                  "description": "Number of recent messages to return"
+                }
+              ]
+            },
+            "description": "Get journey page data with custom limits"
+          },
+          "response": []
+        }
+      ],
+      "description": "Journey page provides user overview including favorites, recent chats, messages, and statistics"
+    },
+    {
+      "name": "Account Management",
+      "item": [
+        {
+          "name": "Delete Own Account",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/user/delete-account",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "user", "delete-account"]
+            },
+            "description": "Soft deletes the authenticated user's account and all associated data"
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/user/delete-account",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "user", "delete-account"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "body": "{\n  \"message\": \"Account deleted successfully.\",\n  \"success\": true\n}"
+            }
+          ]
+        }
+      ],
+      "description": "Account deletion and management endpoints"
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string",
+      "description": "JWT Bearer token for authentication"
+    }
+  ]
+}
+
