@@ -403,6 +403,13 @@ class UserService {
       skip,
       take: limit,
       orderBy: { createdAt: "desc" },
+      include: {
+        _count: {
+          select: {
+            favoriteMessages: true,
+          },
+        },
+      },
     });
 
     if (!users || users.length === 0) {
@@ -420,10 +427,17 @@ class UserService {
       };
     }
 
+    // Shape users to include favoriteCount and omit Prisma _count if desired
+    const shapedUsers = users.map((u) => ({
+      ...u,
+      favoriteCount: u._count?.favoriteMessages || 0,
+      _count: undefined,
+    }));
+
     return {
       message: "Users fetched successfully.",
       success: true,
-      data: users,
+      data: shapedUsers,
       counts, // added
       pagination: {
         currentPage: page,
