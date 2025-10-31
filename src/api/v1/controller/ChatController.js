@@ -180,6 +180,16 @@ class ChatController {
   });
 
   /**
+   * Get all favorite messages for a specific user (by userId)
+   * GET /api/v1/favorites/messages/:userId
+   */
+  static getFavoriteMessagesByUserId = catchAsyncHandler(async (req, res) => {
+    const { userId } = req.params;
+    const result = await ChatService.getFavoriteMessages(userId, req.query);
+    return res.status(200).json(result);
+  });
+
+  /**
    * Get favorite messages for a specific chat
    * GET /api/v1/chats/:chatId/favorites
    */

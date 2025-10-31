@@ -42,6 +42,7 @@ router.get("/", isAuthenticated, ChatController.getUserChats);
 router.get("/search", isAuthenticated, ChatController.searchConversations);
 router.get("/ai/models", ChatController.getAvailableModels);
 router.get("/favorites/messages", isAuthenticated, ChatController.getFavoriteMessages);
+router.get("/favorites/messages/:userId", isAuthenticated, ChatController.getFavoriteMessagesByUserId);
 router.get("/journey", isAuthenticated, ChatController.getJourneyPageData);
 router.get("/:chatId", isAuthenticated, ChatController.getChatDetails);
 router.patch("/:chatId", isAuthenticated, ChatController.updateChat);
