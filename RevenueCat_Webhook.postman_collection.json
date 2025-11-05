@@ -1,0 +1,387 @@
+{
+  "info": {
+    "name": "RevenueCat Webhook API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "RevenueCat webhook endpoints for receiving payment events and retrieving user payment/subscription data. Updated: Complete webhook integration with multiple event type examples."
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Webhooks",
+      "item": [
+        {
+          "name": "RevenueCat Webhook - INITIAL_PURCHASE",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has success field\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('success');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{webhookSecret}}",
+                "description": "Optional: Set if you configured authorization header in RevenueCat",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": {\n    \"id\": \"event_123456789\",\n    \"type\": \"INITIAL_PURCHASE\",\n    \"app_user_id\": \"user@example.com\",\n    \"product_id\": \"premium_monthly\",\n    \"transaction_id\": \"transaction_123456\",\n    \"original_transaction_id\": \"transaction_123456\",\n    \"purchased_at_ms\": 1640995200000,\n    \"expires_at_ms\": 1643673600000,\n    \"store\": \"APP_STORE\",\n    \"platform\": \"ios\",\n    \"price\": 9.99,\n    \"currency\": \"USD\",\n    \"price_in_purchased_currency\": 9.99,\n    \"price_in_purchased_currency_currency\": \"USD\",\n    \"period_type\": \"NORMAL\",\n    \"entitlements\": [\n      {\n        \"product_identifier\": \"premium_monthly\",\n        \"expires_at\": \"2024-02-01T00:00:00Z\",\n        \"purchase_date\": \"2024-01-01T00:00:00Z\"\n      }\n    ],\n    \"environment\": \"PRODUCTION\",\n    \"app_id\": \"your_app_id\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/webhooks/revenuecat/webhook",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "webhooks", "revenuecat", "webhook"]
+            },
+            "description": "Simulates an INITIAL_PURCHASE event from RevenueCat. This is the first purchase by a user.\n\n**Note:** Replace `app_user_id` with an actual user email or ID from your database."
+          },
+          "response": []
+        },
+        {
+          "name": "RevenueCat Webhook - RENEWAL",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{webhookSecret}}",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": {\n    \"id\": \"event_123456790\",\n    \"type\": \"RENEWAL\",\n    \"app_user_id\": \"user@example.com\",\n    \"product_id\": \"premium_monthly\",\n    \"transaction_id\": \"transaction_123457\",\n    \"original_transaction_id\": \"transaction_123456\",\n    \"purchased_at_ms\": 1643673600000,\n    \"expires_at_ms\": 1646352000000,\n    \"store\": \"APP_STORE\",\n    \"platform\": \"ios\",\n    \"price\": 9.99,\n    \"currency\": \"USD\",\n    \"period_type\": \"NORMAL\",\n    \"entitlements\": [\n      {\n        \"product_identifier\": \"premium_monthly\",\n        \"expires_at\": \"2024-03-01T00:00:00Z\"\n      }\n    ],\n    \"environment\": \"PRODUCTION\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/webhooks/revenuecat/webhook",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "webhooks", "revenuecat", "webhook"]
+            },
+            "description": "Simulates a RENEWAL event from RevenueCat. This occurs when a subscription is renewed."
+          },
+          "response": []
+        },
+        {
+          "name": "RevenueCat Webhook - CANCELLATION",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{webhookSecret}}",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": {\n    \"id\": \"event_123456791\",\n    \"type\": \"CANCELLATION\",\n    \"app_user_id\": \"user@example.com\",\n    \"product_id\": \"premium_monthly\",\n    \"transaction_id\": \"transaction_123456\",\n    \"expires_at_ms\": 1643673600000,\n    \"store\": \"APP_STORE\",\n    \"platform\": \"ios\",\n    \"cancelled_at_ms\": 1642000000000,\n    \"environment\": \"PRODUCTION\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/webhooks/revenuecat/webhook",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "webhooks", "revenuecat", "webhook"]
+            },
+            "description": "Simulates a CANCELLATION event from RevenueCat. This occurs when a user cancels their subscription."
+          },
+          "response": []
+        },
+        {
+          "name": "RevenueCat Webhook - UNCANCELLATION",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{webhookSecret}}",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": {\n    \"id\": \"event_123456792\",\n    \"type\": \"UNCANCELLATION\",\n    \"app_user_id\": \"user@example.com\",\n    \"product_id\": \"premium_monthly\",\n    \"transaction_id\": \"transaction_123456\",\n    \"expires_at_ms\": 1643673600000,\n    \"store\": \"APP_STORE\",\n    \"platform\": \"ios\",\n    \"environment\": \"PRODUCTION\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/webhooks/revenuecat/webhook",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "webhooks", "revenuecat", "webhook"]
+            },
+            "description": "Simulates an UNCANCELLATION event from RevenueCat. This occurs when a user reactivates a cancelled subscription."
+          },
+          "response": []
+        },
+        {
+          "name": "RevenueCat Webhook - EXPIRATION",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{webhookSecret}}",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": {\n    \"id\": \"event_123456793\",\n    \"type\": \"EXPIRATION\",\n    \"app_user_id\": \"user@example.com\",\n    \"product_id\": \"premium_monthly\",\n    \"transaction_id\": \"transaction_123456\",\n    \"expires_at_ms\": 1643673600000,\n    \"store\": \"APP_STORE\",\n    \"platform\": \"ios\",\n    \"environment\": \"PRODUCTION\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/webhooks/revenuecat/webhook",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "webhooks", "revenuecat", "webhook"]
+            },
+            "description": "Simulates an EXPIRATION event from RevenueCat. This occurs when a subscription expires."
+          },
+          "response": []
+        },
+        {
+          "name": "RevenueCat Webhook - NON_RENEWING_PURCHASE",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{webhookSecret}}",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": {\n    \"id\": \"event_123456794\",\n    \"type\": \"NON_RENEWING_PURCHASE\",\n    \"app_user_id\": \"user@example.com\",\n    \"product_id\": \"one_time_purchase\",\n    \"transaction_id\": \"transaction_123458\",\n    \"purchased_at_ms\": 1640995200000,\n    \"store\": \"APP_STORE\",\n    \"platform\": \"ios\",\n    \"price\": 4.99,\n    \"currency\": \"USD\",\n    \"environment\": \"PRODUCTION\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/webhooks/revenuecat/webhook",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "webhooks", "revenuecat", "webhook"]
+            },
+            "description": "Simulates a NON_RENEWING_PURCHASE event from RevenueCat. This occurs for one-time purchases."
+          },
+          "response": []
+        },
+        {
+          "name": "RevenueCat Webhook - Simple Format",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"INITIAL_PURCHASE\",\n  \"app_user_id\": \"user@example.com\",\n  \"product_id\": \"premium_monthly\",\n  \"transaction_id\": \"transaction_123456\",\n  \"purchase_date\": \"2024-01-01T00:00:00Z\",\n  \"expiration_date\": \"2024-02-01T00:00:00Z\",\n  \"store\": \"APP_STORE\",\n  \"price\": 9.99,\n  \"currency\": \"USD\",\n  \"environment\": \"PRODUCTION\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/webhooks/revenuecat/webhook",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "webhooks", "revenuecat", "webhook"]
+            },
+            "description": "Alternative simple webhook format (without nested event object). The service handles both formats."
+          },
+          "response": []
+        }
+      ],
+      "description": "Webhook endpoints that RevenueCat will call when payment events occur. These endpoints do not require authentication (unless you configure it in RevenueCat)."
+    },
+    {
+      "name": "User Payment Endpoints",
+      "item": [
+        {
+          "name": "Get User Payments",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has success field\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('success');",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "});",
+                  "",
+                  "pm.test(\"Response has data array\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('data');",
+                  "    pm.expect(jsonData.data).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/webhooks/revenuecat/payments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "webhooks", "revenuecat", "payments"]
+            },
+            "description": "Get all payment records for the authenticated user. Returns a list of all payment/subscription events associated with the user.\n\n**Authentication Required:** Bearer token in Authorization header.\n\n**Response includes:**\n- All payment records\n- Event types (INITIAL_PURCHASE, RENEWAL, etc.)\n- Transaction details\n- Purchase and expiration dates\n- Subscription status"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Active Subscription",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has success field\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('success');",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "});",
+                  "",
+                  "pm.test(\"Response has hasActiveSubscription field\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('hasActiveSubscription');",
+                  "    pm.expect(jsonData.hasActiveSubscription).to.be.a('boolean');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/webhooks/revenuecat/active-subscription",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "webhooks", "revenuecat", "active-subscription"]
+            },
+            "description": "Get the active subscription for the authenticated user. Returns the most recent active subscription if one exists.\n\n**Authentication Required:** Bearer token in Authorization header.\n\n**Response includes:**\n- Active subscription details (if exists)\n- hasActiveSubscription boolean flag\n- Product ID, expiration date, status, etc."
+          },
+          "response": []
+        }
+      ],
+      "description": "Authenticated endpoints for users to retrieve their payment and subscription information."
+    }
+  ]
+}
+

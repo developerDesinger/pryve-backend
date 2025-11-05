@@ -48,6 +48,7 @@ model User {
   readReceipts     MessageReadReceipt[]
   mediaLibrary     MediaLibrary[]
   favoriteMessages UserMessageFavorite[]
+  revenueCatPayments RevenueCatPayment[]
 
   @@map("users")
 }
@@ -340,4 +341,47 @@ model AIConfig {
   technicalErrorActive  Boolean  @default(false)
   
   @@map("ai_configs")
+}
+
+model RevenueCatPayment {
+  id                    String   @id @default(cuid())
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  // User relationship
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // RevenueCat event details
+  eventType             String   // INITIAL_PURCHASE, RENEWAL, CANCELLATION, etc.
+  appUserId             String   // RevenueCat app_user_id (maps to our user)
+  
+  // Product and subscription details
+  productId             String   // Product identifier from RevenueCat
+  transactionId         String?  // Unique transaction identifier
+  originalTransactionId String?  // Original transaction ID
+  store                 String?  // APP_STORE, PLAY_STORE, STRIPE, etc.
+  
+  // Purchase dates
+  purchaseDate          DateTime?
+  expirationDate        DateTime?
+  periodType            String?  // NORMAL, TRIAL, INTRO
+  
+  // Subscription status
+  entitlementStatus     String?  // ACTIVE, EXPIRED, etc.
+  isActive              Boolean  @default(false)
+  
+  // Revenue and pricing
+  price                 Float?
+  currency              String?
+  priceInPurchasedCurrency Float?
+  
+  // Raw webhook data (stored as JSON for flexibility)
+  rawWebhookData        Json?    // Store complete webhook payload for reference
+  
+  // Additional metadata
+  environment           String?  // PRODUCTION, SANDBOX
+  appId                 String?  // RevenueCat app ID
+  
+  @@map("revenuecat_payments")
 }

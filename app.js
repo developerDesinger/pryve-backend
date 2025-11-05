@@ -32,6 +32,7 @@ const mediaRoutes = require("./src/api/v1/routes/media");
 const toneProfileRoutes = require("./src/api/v1/routes/toneProfile");
 const emotionalRuleRoutes = require("./src/api/v1/routes/emotionalRule");
 const aiConfigRoutes = require("./src/api/v1/routes/aiConfig");
+const revenueCatRoutes = require("./src/api/v1/routes/revenuecat");
 // const cronRoutes = require("./src/api/v1/routes/cron");
 const app = express();
 //const admin = require("firebase-admin");
@@ -216,6 +217,7 @@ app.use("/api/v1/media", mediaRoutes);
 app.use("/api/v1/tone-profiles", toneProfileRoutes);
 app.use("/api/v1/emotional-rules", emotionalRuleRoutes);
 app.use("/api/v1/ai-config", aiConfigRoutes);
+app.use("/api/v1/webhooks/revenuecat", revenueCatRoutes);
 // app.use("/api/v1/cron", cronRoutes);
 
 app.post("/upload-image", async (req, res) => {
