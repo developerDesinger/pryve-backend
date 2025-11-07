@@ -49,6 +49,14 @@ class EmotionDetectionService {
         "achievement",
         "win",
         "triumph",
+        "relieved",
+        "relief",
+        "calm",
+        "peaceful",
+        "serene",
+        "light",
+        "hopeful",
+        "optimistic",
       ],
       sadness: [
         "sad",
@@ -78,6 +86,12 @@ class EmotionDetectionService {
         "lonely",
         "empty",
         "hopeless",
+        "drained",
+        "tired",
+        "heavy",
+        "exhausted",
+        "weary",
+        "numb",
       ],
       anger: [
         "angry",
@@ -105,6 +119,11 @@ class EmotionDetectionService {
         "unfair",
         "injustice",
         "wronged",
+        "resentful",
+        "boundary",
+        "disrespect",
+        "ignored",
+        "unheard",
       ],
       fear: [
         "scared",
@@ -132,6 +151,10 @@ class EmotionDetectionService {
         "future",
         "what if",
         "maybe",
+        "doubt",
+        "worry",
+        "insecure",
+        "hesitant",
       ],
       surprise: [
         "surprised",
@@ -154,6 +177,10 @@ class EmotionDetectionService {
         "remarkable",
         "extraordinary",
         "phenomenal",
+        "eye opening",
+        "realized",
+        "realisation",
+        "clarity",
       ],
       disgust: [
         "disgusted",
@@ -259,25 +286,25 @@ class EmotionDetectionService {
         messages: [
           {
             role: "system",
-            content: `You are an expert emotion detection AI. Analyze the given text and determine the primary emotion expressed. 
+            content: `You are Pryve's emotion analyst. Classify the dominant feeling in the user text so we can power the Journey cards (Heart-to-hearts, Growth Moments, Breakthrough Days, Goals Achieved).
 
-Return your response in this exact JSON format:
+Return JSON only:
 {
-  "emotion": "one of: joy, sadness, anger, fear, surprise, disgust, neutral",
-  "confidence": "number between 0 and 1",
-  "reasoning": "brief explanation of why you chose this emotion"
+  "emotion": "joy | sadness | anger | fear | surprise | disgust | neutral",
+  "confidence": 0-1 number,
+  "reasoning": "short explanation referencing words or tone"
 }
 
-Consider these emotions:
-- joy: happiness, excitement, love, satisfaction, pride, gratitude
-- sadness: sorrow, grief, disappointment, loneliness, despair
-- anger: rage, fury, irritation, frustration, resentment, hostility
-- fear: anxiety, worry, terror, panic, nervousness, apprehension
-- surprise: shock, amazement, astonishment, bewilderment
-- disgust: revulsion, repulsion, contempt, loathing, abhorrence
-- neutral: no strong emotion, factual, calm, indifferent
+Guidelines:
+- joy: pride, gratitude, relief, peace, optimism, connection, clarity.
+- sadness: grief, heaviness, exhaustion, vulnerability, loneliness.
+- anger: frustration, resentment, boundary-setting, feeling ignored or disrespected.
+- fear: anxiety, hesitation, uncertainty, worry about outcomes.
+- surprise: new insight, realization, shift in perspective, anything unexpected or eye-opening.
+- disgust: revulsion, moral outrage, rejection.
+- neutral: factual, calm narration without emotional charge.
 
-Be precise and consider the context, intensity, and subtle emotional cues.`,
+Always pick the closest of these seven categories, even if the wording is subtle. Prefer higher confidence when the language is explicit, lower when mixed.`,
           },
           {
             role: "user",

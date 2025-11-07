@@ -31,6 +31,291 @@ function getZodiacSign(b) {
   return "Capricorn";
 }
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const BREAKTHROUGH_MIN_TOTAL = 5;
+const BREAKTHROUGH_MIN_POSITIVE = 2;
+
+const JOURNEY_CATEGORY_FILTERS = {
+  "heart-to-hearts": {
+    where: {
+      isFromAI: false,
+      isDeleted: false,
+      emotion: { not: null },
+      emotionConfidence: { gte: 0.6 },
+    },
+  },
+  "growth-moments": {
+    where: {
+      isFromAI: false,
+      isDeleted: false,
+      emotion: { in: ["joy", "surprise"] },
+      emotionConfidence: { gte: 0.7 },
+    },
+  },
+};
+
+const toDateKey = (date) => new Date(date).toISOString().split("T")[0];
+
+const getWeekKey = (date) => {
+  const d = new Date(date);
+  const startOfYear = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const diffDays = Math.floor((d - startOfYear) / MS_PER_DAY);
+  const week = Math.floor((diffDays + startOfYear.getUTCDay()) / 7);
+  return `${d.getUTCFullYear()}-W${week}`;
+};
+
+const consecutiveWindow = (dates, streakLength) => {
+  if (!dates.length) return null;
+  const unique = [...new Set(dates.map(toDateKey))].sort();
+
+  for (let i = 0; i <= unique.length - streakLength; i++) {
+    let consecutive = true;
+    for (let j = 1; j < streakLength; j++) {
+      const prev = new Date(unique[i + j - 1]);
+      const curr = new Date(unique[i + j]);
+      if (curr - prev !== MS_PER_DAY) {
+        consecutive = false;
+        break;
+      }
+    }
+    if (consecutive) {
+      return {
+        start: new Date(unique[i]),
+        end: new Date(unique[i + streakLength - 1]),
+      };
+    }
+  }
+
+  return null;
+};
+
+const formatDuration = (start, end) => {
+  if (!start || !end) return "Completed";
+  const days = Math.max(1, Math.round((end - start) / MS_PER_DAY));
+  if (days >= 56) return `Took ${Math.round(days / 30)} months`;
+  if (days >= 14) return `Took ${Math.round(days / 7)} weeks`;
+  return days > 1 ? `Took ${days} days` : "Completed";
+};
+
+const mapChatTypeToSource = (chatType = "") => {
+  const map = {
+    PERSONAL_AI: "Reflection",
+    VOICE_NOTE: "Voice Moment",
+    CONVERSATION: "Conversation",
+  };
+
+  return map[chatType.toUpperCase()] || "Reflection";
+};
+
+const mapEmotionToTag = (emotion, confidence = 0) => {
+  const lookup = {
+    joy:
+      confidence >= 0.9
+        ? "Empowered"
+        : confidence >= 0.75
+        ? "Hopeful"
+        : "Joyful",
+    surprise: confidence >= 0.8 ? "Insight" : "Curious",
+    sadness: confidence >= 0.7 ? "Reflective" : "Tender",
+    anger: confidence >= 0.7 ? "Honest" : "Reflective",
+    fear: confidence >= 0.7 ? "Brave" : "Curious",
+    disgust: "Firm",
+    neutral: "Grounded",
+  };
+
+  return lookup[emotion?.toLowerCase()] || "Reflective";
+};
+
+const buildSecondaryTags = (msg) => {
+  const tags = new Set();
+  const emotion = msg?.emotion?.toLowerCase();
+  const confidence = msg?.emotionConfidence || 0;
+
+  if (emotion === "joy") {
+    if (confidence >= 0.9) tags.add("Proud");
+    tags.add("Grateful");
+    if (confidence >= 0.85) tags.add("Strong");
+  }
+
+  if (emotion === "surprise") {
+    tags.add("Curious");
+    if (confidence >= 0.85) tags.add("Insight");
+  }
+
+  if (emotion === "sadness") {
+    tags.add("Reflective");
+    if (confidence >= 0.8) tags.add("Healing");
+  }
+
+  if (emotion === "fear") {
+    tags.add("Brave");
+    if (confidence >= 0.85) tags.add("Resilient");
+  }
+
+  if (emotion === "anger") {
+    tags.add("Honest");
+    if (confidence >= 0.8) tags.add("Boundaries");
+  }
+
+  if (!tags.size) {
+    tags.add("Still Growing");
+  }
+
+  return Array.from(tags);
+};
+
+const deriveGoalsFromActivity = (messages, favorites = []) => {
+  const goals = [];
+
+  const reflections = messages.filter(
+    (msg) => msg.chat?.type === "PERSONAL_AI"
+  );
+  const streak = consecutiveWindow(
+    reflections.map((msg) => msg.createdAt),
+    7
+  );
+
+  if (streak) {
+    const highlight = reflections.find(
+      (msg) => toDateKey(msg.createdAt) === toDateKey(streak.end)
+    );
+
+    goals.push({
+      id: "goal_consistency",
+      title: "Started journaling daily.",
+      summary: "Logged reflections 7 days in a row.",
+      themes: ["Reflection", "Resilience"],
+      startedAt: streak.start,
+      completedAt: streak.end,
+      highlight,
+    });
+  }
+
+  const connectionMessages = messages.filter((msg) => {
+    const emotion = msg.emotion?.toLowerCase();
+    return (
+      msg.chat?.type === "CONVERSATION" &&
+      (emotion === "joy" || emotion === "surprise") &&
+      msg.emotionConfidence >= 0.7
+    );
+  });
+
+  if (connectionMessages.length >= 3) {
+    for (let i = 0; i < connectionMessages.length; i++) {
+      const start = new Date(connectionMessages[i].createdAt);
+      const windowEnd = new Date(start.getTime() + 30 * MS_PER_DAY);
+      let count = 1;
+      let last = connectionMessages[i];
+
+      for (let j = i + 1; j < connectionMessages.length; j++) {
+        const currentDate = new Date(connectionMessages[j].createdAt);
+        if (currentDate <= windowEnd) {
+          count += 1;
+          last = connectionMessages[j];
+        } else {
+          break;
+        }
+      }
+
+      if (count >= 3) {
+        goals.push({
+          id: "goal_connection",
+          title: "Reached out to a friend.",
+          summary: "Shared 3 uplifting conversations within 30 days.",
+          themes: ["Courage", "Connection"],
+          startedAt: start,
+          completedAt: new Date(last.createdAt),
+          highlight: last,
+        });
+        break;
+      }
+    }
+  }
+
+  const boundaryTriggers = messages.filter((msg) => {
+    const emotion = msg.emotion?.toLowerCase();
+    return (
+      (emotion === "anger" || emotion === "fear") &&
+      msg.emotionConfidence >= 0.8
+    );
+  });
+
+  for (const trigger of boundaryTriggers) {
+    const start = new Date(trigger.createdAt);
+    const windowEnd = new Date(start.getTime() + 14 * MS_PER_DAY);
+    const followUps = messages.filter((msg) => {
+      const date = new Date(msg.createdAt);
+      const emotion = msg.emotion?.toLowerCase();
+      return (
+        date > start &&
+        date <= windowEnd &&
+        (emotion === "joy" || emotion === "surprise")
+      );
+    });
+
+    if (followUps.length >= 2) {
+      const last = followUps[followUps.length - 1];
+      goals.push({
+        id: "goal_boundaries",
+        title: "Implemented new boundaries.",
+        summary: "Turned tough emotions into empowered action.",
+        themes: ["Development", "Confidence"],
+        startedAt: start,
+        completedAt: new Date(last.createdAt),
+        highlight: last,
+      });
+      break;
+    }
+  }
+
+  const voiceWeeks = new Map();
+  messages
+    .filter((msg) => msg.chat?.type === "VOICE_NOTE")
+    .forEach((msg) => {
+      const key = getWeekKey(msg.createdAt);
+      if (!voiceWeeks.has(key)) voiceWeeks.set(key, msg);
+    });
+
+  if (voiceWeeks.size >= 3) {
+    const weeks = Array.from(voiceWeeks.values()).sort(
+      (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
+    );
+    const last = weeks[weeks.length - 1];
+    goals.push({
+      id: "goal_meditation",
+      title: "Set a weekly meditation practice.",
+      summary: "Voice notes became a steady mindfulness ritual.",
+      themes: ["Routine", "Peace"],
+      startedAt: new Date(weeks[0].createdAt),
+      completedAt: new Date(last.createdAt),
+      highlight: last,
+    });
+  }
+
+  if (favorites.length >= 5) {
+    const newest = new Date(favorites[0].createdAt);
+    const oldest = new Date(favorites[favorites.length - 1].createdAt);
+    const highlight = favorites[0].message;
+    goals.push({
+      id: "goal_learning",
+      title: "Finished a course.",
+      summary: "Saved 5 insights worth remembering.",
+      themes: ["Growth", "Learning"],
+      startedAt: oldest,
+      completedAt: newest,
+      highlight,
+    });
+  }
+
+  goals.sort(
+    (a, b) =>
+      new Date(b.completedAt || b.startedAt) -
+      new Date(a.completedAt || a.startedAt)
+  );
+
+  return goals;
+};
+
 class ChatService {
   /**
    * Create a new AI chat
@@ -1041,6 +1326,231 @@ class ChatService {
   }
 
   /**
+   * Get journey feed messages by category
+   * GET /api/v1/journey/messages
+   */
+  static async getJourneyMessages(userId, query = {}) {
+    const { category, limit = 20, cursor } = query;
+    const normalized = category?.toLowerCase();
+
+    if (!normalized) {
+      throw new AppError(
+        "Journey category is required.",
+        HttpStatusCodes.BAD_REQUEST
+      );
+    }
+
+    if (normalized === "goals-achieved") {
+      const [messages, favorites] = await Promise.all([
+        prisma.message.findMany({
+          where: {
+            chat: { userId, isDeleted: false },
+            isDeleted: false,
+            isFromAI: false,
+            emotion: { not: null },
+          },
+          include: {
+            chat: { select: { id: true, name: true, type: true } },
+          },
+          orderBy: { createdAt: "asc" },
+          take: 500,
+        }),
+        prisma.userMessageFavorite.findMany({
+          where: { userId },
+          include: {
+            message: {
+              include: {
+                chat: { select: { id: true, name: true, type: true } },
+              },
+            },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 100,
+        }),
+      ]);
+
+      const detectedGoals = deriveGoalsFromActivity(messages, favorites);
+      const boundedGoals = detectedGoals.slice(0, Number(limit) || 20);
+
+      return {
+        success: true,
+        data: {
+          category: normalized,
+          items: boundedGoals.map((goal) => ({
+            id: goal.id,
+            title: goal.title,
+            summary: goal.summary,
+            tags: goal.themes,
+            duration: formatDuration(goal.startedAt, goal.completedAt),
+            timestamp: goal.completedAt || goal.startedAt,
+            emotion: goal.highlight
+              ? {
+                  label: goal.highlight.emotion,
+                  confidence: goal.highlight.emotionConfidence,
+                }
+              : null,
+            highlightMessage: goal.highlight
+              ? {
+                  id: goal.highlight.id,
+                  content: goal.highlight.content,
+                  emotion: goal.highlight.emotion,
+                  emotionConfidence: goal.highlight.emotionConfidence,
+                  source: mapChatTypeToSource(goal.highlight.chat?.type),
+                  timestamp: goal.highlight.createdAt,
+                }
+              : null,
+          })),
+          nextCursor: null,
+        },
+      };
+    }
+
+    if (normalized === "breakthrough-days") {
+      const rawMessages = await prisma.message.findMany({
+        where: {
+          chat: { userId, isDeleted: false },
+          isDeleted: false,
+          isFromAI: false,
+          emotion: { not: null },
+          emotionConfidence: { gte: 0.7 },
+        },
+        include: {
+          chat: { select: { id: true, name: true, type: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 700,
+      });
+
+      const grouped = rawMessages.reduce((acc, msg) => {
+        const key = toDateKey(msg.createdAt);
+        if (!acc[key]) {
+          acc[key] = [];
+        }
+        acc[key].push(msg);
+        return acc;
+      }, {});
+
+      const items = Object.entries(grouped)
+        .map(([dateKey, list]) => {
+          const total = list.length;
+          const positive = list.filter((message) =>
+            ["joy", "surprise"].includes(message.emotion?.toLowerCase())
+          ).length;
+
+          if (
+            total < BREAKTHROUGH_MIN_TOTAL ||
+            positive < BREAKTHROUGH_MIN_POSITIVE
+          ) {
+            return null;
+          }
+
+          const highlight = list.reduce(
+            (best, current) =>
+              !best || current.emotionConfidence > best.emotionConfidence
+                ? current
+                : best,
+            null
+          );
+
+          return {
+            id: dateKey,
+            title: highlight?.content || "Breakthrough captured.",
+            primaryTag: mapEmotionToTag(
+              highlight?.emotion,
+              highlight?.emotionConfidence
+            ),
+            tags: buildSecondaryTags(highlight || {}),
+            source: mapChatTypeToSource(highlight?.chat?.type),
+            timestamp: highlight?.createdAt || dateKey,
+            emotion: {
+              label: highlight?.emotion,
+              confidence: highlight?.emotionConfidence,
+            },
+            metrics: {
+              messageCount: total,
+              positiveCount: positive,
+            },
+            messages: list.slice(0, 3).map((message) => ({
+              id: message.id,
+              content: message.content,
+              timestamp: message.createdAt,
+              emotion: {
+                label: message.emotion,
+                confidence: message.emotionConfidence,
+              },
+              source: mapChatTypeToSource(message.chat?.type),
+            })),
+          };
+        })
+        .filter(Boolean)
+        .sort((a, b) => new Date(b.id) - new Date(a.id))
+        .slice(0, Number(limit) || 20);
+
+      return {
+        success: true,
+        data: {
+          category: normalized,
+          items,
+          nextCursor: null,
+        },
+      };
+    }
+
+    const filterConfig = JOURNEY_CATEGORY_FILTERS[normalized];
+
+    if (!filterConfig) {
+      throw new AppError(
+        "Invalid journey category.",
+        HttpStatusCodes.BAD_REQUEST
+      );
+    }
+
+    const take = Math.min(Number(limit) || 20, 50);
+    const messages = await prisma.message.findMany({
+      where: {
+        ...filterConfig.where,
+        chat: { userId, isDeleted: false },
+      },
+      include: {
+        chat: { select: { id: true, name: true, type: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take,
+      ...(cursor
+        ? {
+            skip: 1,
+            cursor: { id: cursor },
+          }
+        : {}),
+    });
+
+    return {
+      success: true,
+      data: {
+        category: normalized,
+        items: messages.map((msg) => ({
+          id: msg.id,
+          title: msg.content,
+          primaryTag: mapEmotionToTag(msg.emotion, msg.emotionConfidence),
+          tags: buildSecondaryTags(msg),
+          source: mapChatTypeToSource(msg.chat?.type),
+          timestamp: msg.createdAt,
+          emotion: {
+            label: msg.emotion,
+            confidence: msg.emotionConfidence,
+          },
+          chat: {
+            id: msg.chat?.id,
+            name: msg.chat?.name,
+          },
+        })),
+        nextCursor:
+          messages.length === take ? messages[messages.length - 1].id : null,
+      },
+    };
+  }
+
+  /**
    * Get journey page data for user
    * GET /api/v1/journey
    */
@@ -1068,20 +1578,6 @@ class ChatService {
       if (!user) {
         throw new AppError("User not found.", HttpStatusCodes.NOT_FOUND);
       }
-
-      // Helper function to map emotions to UI tags
-      const getEmotionTag = (emotion, confidence = 0) => {
-        const emotionMap = {
-          joy: confidence >= 0.9 ? "Empowered" : "Joyful",
-          sadness: "Reflective",
-          anger: "Reflective",
-          fear: "Curious",
-          surprise: "Hopeful",
-          disgust: "Reflective",
-          neutral: "Reflective",
-        };
-        return emotionMap[emotion?.toLowerCase()] || "Reflective";
-      };
 
       // Calculate all metrics in parallel
       const [
@@ -1196,6 +1692,39 @@ class ChatService {
         }),
       ]);
 
+      const [messagesForGoals, favoritesForGoals] = await Promise.all([
+        prisma.message.findMany({
+          where: {
+            chat: { userId, isDeleted: false },
+            isDeleted: false,
+            isFromAI: false,
+            emotion: { not: null },
+          },
+          include: {
+            chat: { select: { id: true, name: true, type: true } },
+          },
+          orderBy: { createdAt: "asc" },
+          take: 500,
+        }),
+        prisma.userMessageFavorite.findMany({
+          where: { userId },
+          include: {
+            message: {
+              include: {
+                chat: { select: { id: true, name: true, type: true } },
+              },
+            },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 100,
+        }),
+      ]);
+
+      const derivedGoals = deriveGoalsFromActivity(
+        messagesForGoals,
+        favoritesForGoals
+      );
+
       // Process heart-to-hearts
       const heartToHearts = heartToHeartsResult.filter(
         (chat) => chat._count.messages >= 3
@@ -1221,8 +1750,7 @@ class ChatService {
         (day) => day.count >= 5 && day.positiveCount >= 2
       ).length;
 
-      // Goals achieved (placeholder)
-      const goalsAchieved = 0;
+      const goalsAchieved = derivedGoals.length;
 
       // Weekly Journey: Fetch all messages at once, then process in memory
       const currentDate = new Date();
@@ -1289,7 +1817,7 @@ class ChatService {
           }
         });
 
-        const emotionTag = getEmotionTag(
+        const emotionTag = mapEmotionToTag(
           dominantEmotion,
           weekMsgs.length > 0 ? maxCount / weekMsgs.length : 0
         );
@@ -1503,7 +2031,7 @@ class ChatService {
             defaultInsights.neutral;
         }
 
-        const emotionTag = getEmotionTag(
+        const emotionTag = mapEmotionToTag(
           msg.emotion,
           msg.emotionConfidence || 0
         );
@@ -1555,6 +2083,24 @@ class ChatService {
             breakthroughDays,
             goalsAchieved,
           },
+          recentGoals: derivedGoals.slice(0, 5).map((goal) => ({
+            id: goal.id,
+            title: goal.title,
+            summary: goal.summary,
+            themes: goal.themes,
+            duration: formatDuration(goal.startedAt, goal.completedAt),
+            completedAt: goal.completedAt,
+            highlightMessage: goal.highlight
+              ? {
+                  id: goal.highlight.id,
+                  content: goal.highlight.content,
+                  emotion: goal.highlight.emotion,
+                  emotionConfidence: goal.highlight.emotionConfidence,
+                  source: mapChatTypeToSource(goal.highlight.chat?.type),
+                  timestamp: goal.highlight.createdAt,
+                }
+              : null,
+          })),
           weeklyJourney: weeklyJourneys,
           vaultOfSecrets,
           recentChats,

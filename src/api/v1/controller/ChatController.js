@@ -40,24 +40,24 @@ class ChatController {
   static sendMessage = catchAsyncHandler(async (req, res) => {
     const { id: userId } = req.user;
     const { chatId } = req.params;
-    
-    console.log('=== ChatController.sendMessage START ===');
-    console.log('Request body:', req.body);
-    console.log('Request file:', req.file);
-    console.log('Request files:', req.files);
-    console.log('User ID:', userId);
-    console.log('Chat ID:', chatId);
-    
+
+    console.log("=== ChatController.sendMessage START ===");
+    console.log("Request body:", req.body);
+    console.log("Request file:", req.file);
+    console.log("Request files:", req.files);
+    console.log("User ID:", userId);
+    console.log("Chat ID:", chatId);
+
     // Check for multer errors
     if (req.fileValidationError) {
-      console.log('Multer validation error:', req.fileValidationError);
+      console.log("Multer validation error:", req.fileValidationError);
       return res.status(400).json({
         status: false,
         message: req.fileValidationError,
-        data: []
+        data: [],
       });
     }
-    
+
     // Handle different types of messages
     const messageData = {
       content: req.body.content,
@@ -66,21 +66,23 @@ class ChatController {
       audioFile: req.files?.audio?.[0],
       videoFile: req.files?.video?.[0],
     };
-    
-    console.log('Message data prepared:', {
+
+    console.log("Message data prepared:", {
       content: messageData.content,
       hasImageFile: !!messageData.imageFile,
       hasAudioFile: !!messageData.audioFile,
       hasVideoFile: !!messageData.videoFile,
-      imageFileDetails: messageData.imageFile ? {
-        originalname: messageData.imageFile.originalname,
-        mimetype: messageData.imageFile.mimetype,
-        size: messageData.imageFile.size
-      } : null
+      imageFileDetails: messageData.imageFile
+        ? {
+            originalname: messageData.imageFile.originalname,
+            mimetype: messageData.imageFile.mimetype,
+            size: messageData.imageFile.size,
+          }
+        : null,
     });
-    
+
     const result = await ChatService.sendMessage(chatId, userId, messageData);
-    console.log('=== ChatController.sendMessage SUCCESS ===', result);
+    console.log("=== ChatController.sendMessage SUCCESS ===", result);
     return res.status(200).json(result);
   });
 
@@ -154,7 +156,11 @@ class ChatController {
   static removeFromFavorites = catchAsyncHandler(async (req, res) => {
     const { id: userId } = req.user;
     const { chatId, messageId } = req.params;
-    const result = await ChatService.removeFromFavorites(chatId, messageId, userId);
+    const result = await ChatService.removeFromFavorites(
+      chatId,
+      messageId,
+      userId
+    );
     return res.status(200).json(result);
   });
 
@@ -196,7 +202,11 @@ class ChatController {
   static getChatFavorites = catchAsyncHandler(async (req, res) => {
     const { id: userId } = req.user;
     const { chatId } = req.params;
-    const result = await ChatService.getChatFavorites(chatId, userId, req.query);
+    const result = await ChatService.getChatFavorites(
+      chatId,
+      userId,
+      req.query
+    );
     return res.status(200).json(result);
   });
 
@@ -207,6 +217,16 @@ class ChatController {
   static getJourneyPageData = catchAsyncHandler(async (req, res) => {
     const { id: userId } = req.user;
     const result = await ChatService.getJourneyPageData(userId, req.query);
+    return res.status(200).json(result);
+  });
+
+  /**
+   * Get journey feed messages by category
+   * GET /api/v1/journey/messages
+   */
+  static getJourneyMessages = catchAsyncHandler(async (req, res) => {
+    const { id: userId } = req.user;
+    const result = await ChatService.getJourneyMessages(userId, req.query);
     return res.status(200).json(result);
   });
 }
