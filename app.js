@@ -33,6 +33,8 @@ const toneProfileRoutes = require("./src/api/v1/routes/toneProfile");
 const emotionalRuleRoutes = require("./src/api/v1/routes/emotionalRule");
 const aiConfigRoutes = require("./src/api/v1/routes/aiConfig");
 const revenueCatRoutes = require("./src/api/v1/routes/revenuecat");
+const ChatController = require("./src/api/v1/controller/ChatController");
+const { isAuthenticated } = require("./src/api/v1/middlewares/auth.middleware");
 // const cronRoutes = require("./src/api/v1/routes/cron");
 const app = express();
 //const admin = require("firebase-admin");
@@ -219,6 +221,10 @@ app.use("/api/v1/emotional-rules", emotionalRuleRoutes);
 app.use("/api/v1/ai-config", aiConfigRoutes);
 app.use("/api/v1/webhooks/revenuecat", revenueCatRoutes);
 // app.use("/api/v1/cron", cronRoutes);
+
+// Journey routes (alternative path)
+app.get("/api/v1/journey/messages", isAuthenticated, ChatController.getJourneyMessages);
+app.get("/api/v1/journey", isAuthenticated, ChatController.getJourneyPageData);
 
 app.post("/upload-image", async (req, res) => {
   try {
