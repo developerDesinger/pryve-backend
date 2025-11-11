@@ -33,6 +33,15 @@ class RevenueCatController {
   });
 
   /**
+   * Get payment history across all users (admin only)
+   * GET /api/v1/revenuecat/admin/payments
+   */
+  static getAllPayments = catchAsyncHandler(async (req, res) => {
+    const result = await RevenueCatService.getAllPayments(req.query);
+    return res.status(200).json(result);
+  });
+
+  /**
    * Get active subscription for user (authenticated endpoint)
    * GET /api/v1/webhooks/revenuecat/active-subscription
    */
@@ -44,4 +53,3 @@ class RevenueCatController {
 }
 
 module.exports = RevenueCatController;
-

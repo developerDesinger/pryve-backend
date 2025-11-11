@@ -1,6 +1,9 @@
 const express = require("express");
 const RevenueCatController = require("../controller/RevenueCatController");
-const { isAuthenticated } = require("../middlewares/auth.middleware");
+const {
+  isAuthenticated,
+  restrictTo,
+} = require("../middlewares/auth.middleware");
 
 const router = express.Router();
 
@@ -10,7 +13,18 @@ router.post("/webhook", RevenueCatController.handleWebhook);
 
 // User payment endpoints (authenticated)
 router.get("/payments", isAuthenticated, RevenueCatController.getUserPayments);
-router.get("/active-subscription", isAuthenticated, RevenueCatController.getActiveSubscription);
+router.get(
+  "/active-subscription",
+  isAuthenticated,
+  RevenueCatController.getActiveSubscription
+);
+
+// Admin payment history endpoint
+router.get(
+  "/admin/payments",
+  isAuthenticated,
+  restrictTo("ADMIN"),
+  RevenueCatController.getAllPayments
+);
 
 module.exports = router;
-
