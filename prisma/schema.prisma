@@ -385,3 +385,25 @@ model RevenueCatPayment {
   
   @@map("revenuecat_payments")
 }
+
+model ApiKey {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // API Key Information
+  name        String   // Display name (e.g., "OpenAI API Key", "Stripe Secret Key")
+  apiType     String   // Type of API (OPENAI, STRIPE, SENDGRID, etc.)
+  keyValue    String   // Encrypted API key value
+  description String?  // Optional description
+  
+  // Metadata
+  isActive    Boolean  @default(true)
+  lastUsedAt  DateTime? // Track when key was last used
+  
+  // Environment (optional - for distinguishing dev/prod keys)
+  environment String?  // PRODUCTION, DEVELOPMENT, STAGING
+  
+  @@unique([apiType, environment])
+  @@map("api_keys")
+}

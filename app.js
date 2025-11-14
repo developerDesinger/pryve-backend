@@ -33,6 +33,8 @@ const toneProfileRoutes = require("./src/api/v1/routes/toneProfile");
 const emotionalRuleRoutes = require("./src/api/v1/routes/emotionalRule");
 const aiConfigRoutes = require("./src/api/v1/routes/aiConfig");
 const revenueCatRoutes = require("./src/api/v1/routes/revenuecat");
+const dashboardRoutes = require("./src/api/v1/routes/dashboard");
+const apiKeyRoutes = require("./src/api/v1/routes/apiKey");
 const ChatController = require("./src/api/v1/controller/ChatController");
 const { isAuthenticated } = require("./src/api/v1/middlewares/auth.middleware");
 // const cronRoutes = require("./src/api/v1/routes/cron");
@@ -220,6 +222,8 @@ app.use("/api/v1/tone-profiles", toneProfileRoutes);
 app.use("/api/v1/emotional-rules", emotionalRuleRoutes);
 app.use("/api/v1/ai-config", aiConfigRoutes);
 app.use("/api/v1/webhooks/revenuecat", revenueCatRoutes);
+app.use("/api/v1/dashboard", dashboardRoutes);
+app.use("/api/v1/api-keys", apiKeyRoutes);
 // app.use("/api/v1/cron", cronRoutes);
 
 // Journey routes (alternative path)

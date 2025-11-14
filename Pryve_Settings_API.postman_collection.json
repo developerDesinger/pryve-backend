@@ -1,0 +1,469 @@
+{
+  "info": {
+    "name": "Pryve Settings API (API Keys)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "API Key Management: Securely store and manage API keys (OpenAI, Stripe, etc.) in the database. All keys are encrypted before storage. All endpoints require authentication."
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "apiKeyId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Get All API Keys",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/api-keys",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "api-keys"]
+        },
+        "description": "Get all stored API keys. Returns masked keys only (e.g., 'sk-...xyz') for security."
+      },
+      "response": []
+    },
+    {
+      "name": "Get API Key by ID",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/api-keys/{{apiKeyId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "api-keys", "{{apiKeyId}}"]
+        },
+        "description": "Get a specific API key by ID. Returns masked key only."
+      },
+      "response": []
+    },
+    {
+      "name": "Create or Update API Keys",
+      "item": [
+        {
+          "name": "Create/Update OpenAI API Key",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"OpenAI API Key\",\n  \"apiType\": \"OPENAI\",\n  \"keyValue\": \"sk-your-actual-openai-api-key-here\",\n  \"description\": \"Required for AI conversation capabilities\",\n  \"environment\": \"PRODUCTION\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/api-keys",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "api-keys"]
+            },
+            "description": "Create or update OpenAI API key. If a key already exists for this type and environment, it will be updated."
+          },
+          "response": []
+        },
+        {
+          "name": "Create/Update Stripe Secret Key",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Stripe Secret Key\",\n  \"apiType\": \"STRIPE\",\n  \"keyValue\": \"sk_live_your-actual-stripe-secret-key-here\",\n  \"description\": \"Required for payment processing and subscriptions\",\n  \"environment\": \"PRODUCTION\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/api-keys",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "api-keys"]
+            },
+            "description": "Create or update Stripe secret key for payment processing."
+          },
+          "response": []
+        },
+        {
+          "name": "Create/Update SendGrid API Key",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"SendGrid API Key\",\n  \"apiType\": \"SENDGRID\",\n  \"keyValue\": \"SG.your-actual-sendgrid-api-key-here\",\n  \"description\": \"Required for email sending via SendGrid\",\n  \"environment\": \"PRODUCTION\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/api-keys",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "api-keys"]
+            },
+            "description": "Create or update SendGrid API key for email services."
+          },
+          "response": []
+        },
+        {
+          "name": "Create/Update Firebase API Key",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Firebase Service Account Key\",\n  \"apiType\": \"FIREBASE\",\n  \"keyValue\": \"your-firebase-service-account-json-key\",\n  \"description\": \"Required for Firebase services\",\n  \"environment\": \"PRODUCTION\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/api-keys",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "api-keys"]
+            },
+            "description": "Create or update Firebase service account key."
+          },
+          "response": []
+        },
+        {
+          "name": "Create/Update AWS API Key",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"AWS Access Key\",\n  \"apiType\": \"AWS\",\n  \"keyValue\": \"AKIAIOSFODNN7EXAMPLE\",\n  \"description\": \"Required for AWS S3 and other AWS services\",\n  \"environment\": \"PRODUCTION\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/api-keys",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "api-keys"]
+            },
+            "description": "Create or update AWS access key."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Development Environment Key",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"OpenAI API Key (Development)\",\n  \"apiType\": \"OPENAI\",\n  \"keyValue\": \"sk-test-key-for-development\",\n  \"description\": \"Development environment OpenAI key\",\n  \"environment\": \"DEVELOPMENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/api-keys",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "api-keys"]
+            },
+            "description": "Create API key for development environment. You can have separate keys for PRODUCTION, DEVELOPMENT, and STAGING."
+          },
+          "response": []
+        }
+      ],
+      "description": "Create or update API keys for different services and environments."
+    },
+    {
+      "name": "Update API Key",
+      "item": [
+        {
+          "name": "Update Key Value Only",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"keyValue\": \"sk-new-updated-key-value-here\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/api-keys/{{apiKeyId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "api-keys", "{{apiKeyId}}"]
+            },
+            "description": "Update only the key value. The key will be re-encrypted before storage."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Name and Description",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated OpenAI API Key\",\n  \"description\": \"Updated description for the key\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/api-keys/{{apiKeyId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "api-keys", "{{apiKeyId}}"]
+            },
+            "description": "Update name and description without changing the key value."
+          },
+          "response": []
+        },
+        {
+          "name": "Deactivate API Key",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/api-keys/{{apiKeyId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "api-keys", "{{apiKeyId}}"]
+            },
+            "description": "Deactivate an API key without deleting it. Inactive keys won't be used by the system."
+          },
+          "response": []
+        },
+        {
+          "name": "Activate API Key",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/api-keys/{{apiKeyId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "api-keys", "{{apiKeyId}}"]
+            },
+            "description": "Activate a previously deactivated API key."
+          },
+          "response": []
+        }
+      ],
+      "description": "Update API key properties."
+    },
+    {
+      "name": "Toggle API Key Status",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/api-keys/{{apiKeyId}}/toggle",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "api-keys", "{{apiKeyId}}", "toggle"]
+        },
+        "description": "Toggle API key active status. If active, it becomes inactive and vice versa."
+      },
+      "response": []
+    },
+    {
+      "name": "Delete API Key",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/api-keys/{{apiKeyId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "api-keys", "{{apiKeyId}}"]
+        },
+        "description": "Permanently delete an API key from the database. This action cannot be undone."
+      },
+      "response": []
+    }
+  ]
+}
+

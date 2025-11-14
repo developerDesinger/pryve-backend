@@ -1,0 +1,294 @@
+{
+  "info": {
+    "name": "Pryve Dashboard API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Dashboard APIs: User activity trends, engagement metrics, emotional topics analysis, and recent activity tracking. All endpoints require authentication."
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Get Complete Dashboard",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/dashboard?period=monthly&activityLimit=10",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "dashboard"],
+          "query": [
+            {
+              "key": "period",
+              "value": "monthly",
+              "description": "Time period: daily, weekly, monthly, yearly"
+            },
+            {
+              "key": "activityLimit",
+              "value": "10",
+              "description": "Number of recent activities to return (max 50)"
+            }
+          ]
+        },
+        "description": "Get all dashboard metrics in a single API call. Returns user activity trends, engagement, emotional topics, and recent activity."
+      },
+      "response": []
+    },
+    {
+      "name": "User Activity Trends",
+      "item": [
+        {
+          "name": "Get Activity Trends (Monthly)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/dashboard/activity-trends?period=monthly",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "dashboard", "activity-trends"],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "monthly",
+                  "description": "Time period: daily, weekly, monthly, yearly"
+                }
+              ]
+            },
+            "description": "Get daily active users and message volume trends. Returns data points for chart visualization."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Activity Trends (Weekly)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/dashboard/activity-trends?period=weekly",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "dashboard", "activity-trends"],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "weekly"
+                }
+              ]
+            },
+            "description": "Get weekly activity trends (last 30 days)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Activity Trends (Daily)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/dashboard/activity-trends?period=daily",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "dashboard", "activity-trends"],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "daily"
+                }
+              ]
+            },
+            "description": "Get daily activity trends (last 7 days)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Activity Trends (Yearly)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/dashboard/activity-trends?period=yearly",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "dashboard", "activity-trends"],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "yearly"
+                }
+              ]
+            },
+            "description": "Get yearly activity trends (last 365 days)."
+          },
+          "response": []
+        }
+      ],
+      "description": "User Activity Trends endpoints for different time periods."
+    },
+    {
+      "name": "User Engagement",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/dashboard/user-engagement",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "dashboard", "user-engagement"]
+        },
+        "description": "Get user engagement metrics including active vs inactive users breakdown, engagement rate, and percentages."
+      },
+      "response": []
+    },
+    {
+      "name": "Emotional Topics Analysis",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/dashboard/emotional-topics",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "dashboard", "emotional-topics"]
+        },
+        "description": "Get AI-detected emotional themes from user conversations. Returns topics with mentions, member counts, and growth metrics."
+      },
+      "response": []
+    },
+    {
+      "name": "Recent Activity",
+      "item": [
+        {
+          "name": "Get Recent Activity (Default - 10)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/dashboard/recent-activity",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "dashboard", "recent-activity"]
+            },
+            "description": "Get recent user activities (default: 10 items). Includes registrations, upgrades, heavy usage, etc."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Recent Activity (20 items)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/dashboard/recent-activity?limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "dashboard", "recent-activity"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Number of activities to return (max 50)"
+                }
+              ]
+            },
+            "description": "Get recent user activities with custom limit."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Recent Activity (50 items - Max)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/dashboard/recent-activity?limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "dashboard", "recent-activity"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Get maximum number of recent activities (50)."
+          },
+          "response": []
+        }
+      ],
+      "description": "Recent Activity endpoints with different limits."
+    }
+  ]
+}
+
