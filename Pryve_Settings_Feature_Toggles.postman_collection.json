@@ -1,0 +1,399 @@
+{
+  "info": {
+    "name": "Pryve Settings API (Feature Toggles & System Language)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Settings APIs: Feature toggles management and system language configuration. All endpoints require authentication."
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "featureName",
+      "value": "ADVANCED_ANALYTICS",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Get Complete Settings",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/settings",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "settings"]
+        },
+        "description": "Get all settings including feature toggles, system settings, and system language in one call."
+      },
+      "response": []
+    },
+    {
+      "name": "Feature Toggles",
+      "item": [
+        {
+          "name": "Get All Feature Toggles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/feature-toggles",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "settings", "feature-toggles"]
+            },
+            "description": "Get all feature toggles with their current status (enabled/disabled, coming soon, etc.)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Feature Toggle by Name",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/feature-toggles/{{featureName}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "settings", "feature-toggles", "{{featureName}}"]
+            },
+            "description": "Get a specific feature toggle by name. Use feature names like: ADVANCED_ANALYTICS, AI_VOICE_CHAT, GROUP_THERAPY_SESSIONS, etc."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Feature Toggle",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isEnabled\": true,\n  \"status\": \"ACTIVE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/feature-toggles/{{featureName}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "settings", "feature-toggles", "{{featureName}}"]
+            },
+            "description": "Update feature toggle status. Cannot enable features marked as 'COMING_SOON'."
+          },
+          "response": []
+        },
+        {
+          "name": "Toggle Feature On/Off",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/feature-toggles/{{featureName}}/toggle",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "settings", "feature-toggles", "{{featureName}}", "toggle"]
+            },
+            "description": "Quickly toggle a feature on or off. Cannot enable features marked as 'COMING_SOON'."
+          },
+          "response": []
+        },
+        {
+          "name": "Initialize Default Feature Toggles",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/feature-toggles/initialize",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "settings", "feature-toggles", "initialize"]
+            },
+            "description": "Initialize default feature toggles in the database. Safe to call multiple times - only creates missing toggles."
+          },
+          "response": []
+        },
+        {
+          "name": "Enable Advanced Analytics",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isEnabled\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/feature-toggles/ADVANCED_ANALYTICS",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "settings", "feature-toggles", "ADVANCED_ANALYTICS"]
+            },
+            "description": "Enable Advanced Analytics feature."
+          },
+          "response": []
+        },
+        {
+          "name": "Disable Advanced Analytics",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isEnabled\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/feature-toggles/ADVANCED_ANALYTICS",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "settings", "feature-toggles", "ADVANCED_ANALYTICS"]
+            },
+            "description": "Disable Advanced Analytics feature."
+          },
+          "response": []
+        }
+      ],
+      "description": "Feature Toggles management endpoints."
+    },
+    {
+      "name": "System Language",
+      "item": [
+        {
+          "name": "Get System Language",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/system-language",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "settings", "system-language"]
+            },
+            "description": "Get current system language and available language options."
+          },
+          "response": []
+        },
+        {
+          "name": "Update System Language to English",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"language\": \"English\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/system-language",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "settings", "system-language"]
+            },
+            "description": "Update system language to English."
+          },
+          "response": []
+        },
+        {
+          "name": "Update System Language to Spanish",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"language\": \"Spanish\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/system-language",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "settings", "system-language"]
+            },
+            "description": "Update system language to Spanish."
+          },
+          "response": []
+        },
+        {
+          "name": "Update System Language to French",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"language\": \"French\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/system-language",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "settings", "system-language"]
+            },
+            "description": "Update system language to French."
+          },
+          "response": []
+        }
+      ],
+      "description": "System Language management endpoints."
+    },
+    {
+      "name": "System Settings",
+      "item": [
+        {
+          "name": "Get All System Settings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/system",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "settings", "system"]
+            },
+            "description": "Get all system settings (language, theme, timezone, etc.)."
+          },
+          "response": []
+        }
+      ],
+      "description": "System Settings endpoints."
+    }
+  ]
+}
+

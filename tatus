@@ -1,0 +1,34 @@
+[1mdiff --git a/app.js b/app.js[m
+[1mindex 9357122..32b9663 100644[m
+[1m--- a/app.js[m
+[1m+++ b/app.js[m
+[36m@@ -32,6 +32,8 @@[m [mconst mediaRoutes = require("./src/api/v1/routes/media");[m
+ const toneProfileRoutes = require("./src/api/v1/routes/toneProfile");[m
+ const emotionalRuleRoutes = require("./src/api/v1/routes/emotionalRule");[m
+ const aiConfigRoutes = require("./src/api/v1/routes/aiConfig");[m
+[32m+[m[32mconst chatSettingsRoutes = require("./src/api/v1/routes/chatSettings");[m
+[32m+[m[32mconst analyticsRoutes = require("./src/api/v1/routes/analytics");[m
+ const revenueCatRoutes = require("./src/api/v1/routes/revenuecat");[m
+ const dashboardRoutes = require("./src/api/v1/routes/dashboard");[m
+ const apiKeyRoutes = require("./src/api/v1/routes/apiKey");[m
+[36m@@ -221,13 +223,19 @@[m [mapp.use("/api/v1/media", mediaRoutes);[m
+ app.use("/api/v1/tone-profiles", toneProfileRoutes);[m
+ app.use("/api/v1/emotional-rules", emotionalRuleRoutes);[m
+ app.use("/api/v1/ai-config", aiConfigRoutes);[m
+[32m+[m[32mapp.use("/api/v1/chat-settings", chatSettingsRoutes);[m
+ app.use("/api/v1/webhooks/revenuecat", revenueCatRoutes);[m
+[32m+[m[32mapp.use("/api/v1/analytics", analyticsRoutes);[m
+ app.use("/api/v1/dashboard", dashboardRoutes);[m
+ app.use("/api/v1/api-keys", apiKeyRoutes);[m
+ // app.use("/api/v1/cron", cronRoutes);[m
+ [m
+ // Journey routes (alternative path)[m
+[31m-app.get("/api/v1/journey/messages", isAuthenticated, ChatController.getJourneyMessages);[m
+[32m+[m[32mapp.get([m
+[32m+[m[32m  "/api/v1/journey/messages",[m
+[32m+[m[32m  isAuthenticated,[m
+[32m+[m[32m  ChatController.getJourneyMessages[m
+[32m+[m[32m);[m
+ app.get("/api/v1/journey", isAuthenticated, ChatController.getJourneyPageData);[m
+ [m
+ app.post("/upload-image", async (req, res) => {[m

@@ -427,3 +427,44 @@ model ApiKey {
   @@unique([apiType, environment])
   @@map("api_keys")
 }
+
+model FeatureToggle {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Feature Information
+  name        String   @unique // Feature name (e.g., "ADVANCED_ANALYTICS", "AI_VOICE_CHAT")
+  displayName String   // Display name (e.g., "Advanced Analytics", "AI Voice Chat")
+  description String?  // Feature description
+  category    String?  // Feature category (e.g., "ANALYTICS", "COMMUNICATION", "SUPPORT")
+  
+  // Feature Status
+  isEnabled   Boolean  @default(false)
+  status      String   @default("ACTIVE") // ACTIVE, COMING_SOON, DEPRECATED
+  
+  // Metadata
+  icon        String?  // Icon identifier or URL
+  order       Int      @default(0) // Display order
+  
+  @@map("feature_toggles")
+}
+
+model SystemSettings {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Settings Key-Value pairs
+  key         String   @unique // Setting key (e.g., "SYSTEM_LANGUAGE", "THEME", "TIMEZONE")
+  value       String   // Setting value (e.g., "English", "dark", "UTC")
+  displayName String   // Display name for the setting
+  description String?  // Setting description
+  category    String?  // Setting category (e.g., "LOCALIZATION", "APPEARANCE", "GENERAL")
+  
+  // Metadata
+  dataType    String   @default("STRING") // STRING, NUMBER, BOOLEAN, JSON
+  options     Json?    // Available options (for dropdowns, etc.)
+  
+  @@map("system_settings")
+}
