@@ -386,6 +386,26 @@ model RevenueCatPayment {
   @@map("revenuecat_payments")
 }
 
+model ChatSettings {
+  id                    String   @id @default(cuid())
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  dailyReset            Boolean  @default(false)
+  freeTierMessageLimit  Int      @default(10)
+  gracePeriodMessages   Int      @default(0)
+
+  upgradePromptText     String?  @db.Text
+  showPromptOnLimit     Boolean  @default(true)
+  showPromptAfterGrace  Boolean  @default(false)
+  showPromptOnReturn    Boolean  @default(false)
+
+  newUserMessage        String?  @db.Text
+  returningUserMessage  String?  @db.Text
+
+  @@map("chat_settings")
+}
+
 model ApiKey {
   id          String   @id @default(cuid())
   createdAt   DateTime @default(now())

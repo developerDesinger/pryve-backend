@@ -32,6 +32,8 @@ const mediaRoutes = require("./src/api/v1/routes/media");
 const toneProfileRoutes = require("./src/api/v1/routes/toneProfile");
 const emotionalRuleRoutes = require("./src/api/v1/routes/emotionalRule");
 const aiConfigRoutes = require("./src/api/v1/routes/aiConfig");
+const chatSettingsRoutes = require("./src/api/v1/routes/chatSettings");
+const analyticsRoutes = require("./src/api/v1/routes/analytics");
 const revenueCatRoutes = require("./src/api/v1/routes/revenuecat");
 const dashboardRoutes = require("./src/api/v1/routes/dashboard");
 const apiKeyRoutes = require("./src/api/v1/routes/apiKey");
@@ -221,13 +223,19 @@ app.use("/api/v1/media", mediaRoutes);
 app.use("/api/v1/tone-profiles", toneProfileRoutes);
 app.use("/api/v1/emotional-rules", emotionalRuleRoutes);
 app.use("/api/v1/ai-config", aiConfigRoutes);
+app.use("/api/v1/chat-settings", chatSettingsRoutes);
 app.use("/api/v1/webhooks/revenuecat", revenueCatRoutes);
+app.use("/api/v1/analytics", analyticsRoutes);
 app.use("/api/v1/dashboard", dashboardRoutes);
 app.use("/api/v1/api-keys", apiKeyRoutes);
 // app.use("/api/v1/cron", cronRoutes);
 
 // Journey routes (alternative path)
-app.get("/api/v1/journey/messages", isAuthenticated, ChatController.getJourneyMessages);
+app.get(
+  "/api/v1/journey/messages",
+  isAuthenticated,
+  ChatController.getJourneyMessages
+);
 app.get("/api/v1/journey", isAuthenticated, ChatController.getJourneyPageData);
 
 app.post("/upload-image", async (req, res) => {
