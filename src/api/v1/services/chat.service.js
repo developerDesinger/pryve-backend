@@ -4,6 +4,7 @@ const AppError = require("../utils/AppError");
 const HttpStatusCodes = require("../enums/httpStatusCode");
 const MediaLibraryService = require("./mediaLibrary.service");
 const EmotionDetectionService = require("../utils/emotionDetection");
+const Logger = require("../utils/logger");
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -335,6 +336,8 @@ class ChatService {
       }
     }
 
+    const finalSystemPrompt = resolvedSystemPrompt || "You are a helpful AI assistant.";
+    
     const chat = await prisma.chat.create({
       data: {
         name: name || `Chat ${new Date().toLocaleDateString()}`,
@@ -342,9 +345,19 @@ class ChatService {
         type: "PERSONAL_AI",
         userId,
         aiModel: aiModel || "gpt-4o",
-        systemPrompt: resolvedSystemPrompt || "You are a helpful AI assistant.",
+        systemPrompt: finalSystemPrompt,
         temperature: temperature || 0.7,
       },
+    });
+
+    // Log the system prompt being set
+    Logger.info("Chat Created with System Prompt", {
+      chatId: chat.id,
+      userId,
+      systemPrompt: finalSystemPrompt,
+      systemPromptSource: systemPrompt ? "user-provided" : (resolvedSystemPrompt ? "global-config" : "default"),
+      aiModel: aiModel || "gpt-4o",
+      temperature: temperature || 0.7,
     });
 
     return {
@@ -523,12 +536,42 @@ class ChatService {
       content: msg.content,
     }));
 
-    // Add system prompt
-    if (chat.systemPrompt) {
+    // Get system prompt from AI Config table (database) - priority over chat.systemPrompt
+    let systemPromptToUse = null;
+    const aiConfig = await prisma.aIConfig.findFirst({
+      select: { systemPrompt: true, systemPromptActive: true },
+    });
+
+    // Use AI config prompt if it exists (from database)
+    if (aiConfig?.systemPrompt) {
+      systemPromptToUse = aiConfig.systemPrompt;
+    } else if (chat.systemPrompt) {
+      // Fall back to chat-specific prompt if no AI config exists
+      systemPromptToUse = chat.systemPrompt;
+    }
+
+    // Add system prompt from database
+    if (systemPromptToUse) {
       messages.unshift({
         role: "system",
-        content: chat.systemPrompt,
+        content: systemPromptToUse,
       });
+      
+      // Log the prompt being used clearly
+      console.log("\n" + "=".repeat(80));
+      console.log("📝 SYSTEM PROMPT BEING USED:");
+      console.log("=".repeat(80));
+      console.log(systemPromptToUse);
+      console.log("=".repeat(80));
+      console.log(`Source: ${aiConfig?.systemPrompt ? "AI Config Table (Database)" : "Chat-specific"}`);
+      console.log("=".repeat(80) + "\n");
+    } else {
+      console.log("\n" + "=".repeat(80));
+      console.log("⚠️  NO SYSTEM PROMPT SET");
+      console.log("=".repeat(80));
+      console.log("AI Config Prompt:", aiConfig?.systemPrompt || "None");
+      console.log("Chat System Prompt:", chat.systemPrompt || "None");
+      console.log("=".repeat(80) + "\n");
     }
 
     // Inject zodiac from user's birthday
@@ -546,6 +589,39 @@ class ChatService {
         content: `User Birthdate: ${user.dateOfBirth}`,
       });
     }
+
+    // Log all system prompts being used
+    const systemPrompts = messages
+      .filter((msg) => msg.role === "system")
+      .map((msg) => msg.content);
+    
+    Logger.info("System Prompts Being Used", {
+      chatId,
+      userId,
+      systemPrompts: systemPrompts,
+      systemPromptCount: systemPrompts.length,
+      mainSystemPrompt: systemPromptToUse || "No system prompt set",
+      promptSource: aiConfig?.systemPrompt ? "ai-config-table" : (chat.systemPrompt ? "chat-specific" : "none"),
+      aiConfigPrompt: aiConfig?.systemPrompt || null,
+      aiConfigActive: aiConfig?.systemPromptActive || false,
+      chatSystemPrompt: chat.systemPrompt || null,
+      zodiac: zodiac || null,
+      birthdate: user?.dateOfBirth || null,
+    });
+
+    // Log full messages array (for debugging)
+    Logger.debug("Full Messages Array Being Sent to OpenAI", {
+      chatId,
+      messageCount: messages.length,
+      messages: messages.map((msg) => ({
+        role: msg.role,
+        contentLength: msg.content?.length || 0,
+        contentPreview: msg.role === "system" 
+          ? msg.content?.substring(0, 200) + (msg.content?.length > 200 ? "..." : "")
+          : msg.content?.substring(0, 100) + (msg.content?.length > 100 ? "..." : ""),
+      })),
+    });
+
     let aiResponse = null;
     let tokensUsed = 0;
     let processingTime = 0;
@@ -878,6 +954,18 @@ class ChatService {
         temperature,
       },
     });
+
+    // Log if system prompt was updated
+    if (systemPrompt !== undefined) {
+      Logger.info("Chat System Prompt Updated", {
+        chatId,
+        userId,
+        oldSystemPrompt: chat.systemPrompt,
+        newSystemPrompt: systemPrompt,
+        aiModel: aiModel || chat.aiModel,
+        temperature: temperature !== undefined ? temperature : chat.temperature,
+      });
+    }
 
     return {
       message: "Chat updated successfully.",
