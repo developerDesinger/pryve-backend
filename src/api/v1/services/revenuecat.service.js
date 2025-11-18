@@ -1,6 +1,7 @@
 const prisma = require("../../../lib/prisma");
 const AppError = require("../utils/AppError");
 const HttpStatusCodes = require("../enums/httpStatusCode");
+const NotificationService = require("./notification.service");
 
 class RevenueCatService {
   /**
@@ -175,6 +176,8 @@ class RevenueCatService {
       console.log(
         `✅ [REVENUECAT WEBHOOK] Payment record created: ${payment.id} for user: ${user.email}`
       );
+
+      await NotificationService.notifyPaymentEvent({ user, payment });
 
       return {
         success: true,

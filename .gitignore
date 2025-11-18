@@ -73,6 +73,7 @@ web_modules/
 .env.test
 .env.production
 
-
+# Firebase service account (contains sensitive credentials)
+src/config/firebase-service-account.json
 
 /src/generated/prisma

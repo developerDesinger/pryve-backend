@@ -1,0 +1,490 @@
+{
+  "info": {
+    "name": "Pryve Notifications API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Notification APIs: Admin broadcast messages, user notifications, payment notifications, and new user registration notifications. Includes push notification support via Firebase Cloud Messaging (FCM)."
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "notificationId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Admin Broadcast",
+      "item": [
+        {
+          "name": "Send Broadcast to All Users",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Important Announcement\",\n  \"message\": \"We have exciting news! Check out our latest features.\",\n  \"sendToAll\": true,\n  \"category\": \"BROADCAST\",\n  \"metadata\": {\n    \"priority\": \"high\",\n    \"actionUrl\": \"/features\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/broadcast",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications", "broadcast"]
+            },
+            "description": "Send a broadcast notification to all active users. Requires ADMIN role. Push notifications will be sent to users who have registered FCM tokens."
+          },
+          "response": []
+        },
+        {
+          "name": "Send Broadcast to Specific Users",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Personal Message\",\n  \"message\": \"This is a targeted message for specific users.\",\n  \"sendToAll\": false,\n  \"recipientIds\": [\n    \"user_id_1\",\n    \"user_id_2\",\n    \"user_id_3\"\n  ],\n  \"category\": \"BROADCAST\",\n  \"metadata\": {\n    \"customField\": \"value\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/broadcast",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications", "broadcast"]
+            },
+            "description": "Send a broadcast notification to specific users by their IDs. Requires ADMIN role."
+          },
+          "response": []
+        },
+        {
+          "name": "Send Broadcast with Filters",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Filtered Broadcast\",\n  \"message\": \"This message is sent to users matching specific criteria.\",\n  \"sendToAll\": true,\n  \"filters\": {\n    \"role\": \"CLIENT\",\n    \"status\": \"ACTIVE\",\n    \"search\": \"example@email.com\"\n  },\n  \"category\": \"BROADCAST\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/broadcast",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications", "broadcast"]
+            },
+            "description": "Send a broadcast notification with filters (role, status, search). Requires ADMIN role."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Get Notifications",
+      "item": [
+        {
+          "name": "Get My Notifications (Inbox)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications?scope=inbox&page=1&pageSize=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications"],
+              "query": [
+                {
+                  "key": "scope",
+                  "value": "inbox",
+                  "description": "Scope: inbox (received), sent (sent by me), all (admin only)"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number (default: 1)"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20",
+                  "description": "Items per page (default: 20, max: 100)"
+                }
+              ]
+            },
+            "description": "Get notifications received by the authenticated user (inbox). Returns paginated results."
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Sent Notifications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications?scope=sent&page=1&pageSize=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications"],
+              "query": [
+                {
+                  "key": "scope",
+                  "value": "sent",
+                  "description": "Get notifications sent by the authenticated user"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Get notifications sent by the authenticated user. Requires ADMIN role for broadcast messages."
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Notifications (Admin Only)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications?scope=all&page=1&pageSize=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications"],
+              "query": [
+                {
+                  "key": "scope",
+                  "value": "all",
+                  "description": "Get all notifications (admin only)"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Get all notifications in the system. Requires ADMIN role."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Notifications by Category",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications?scope=inbox&category=PAYMENT&page=1&pageSize=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications"],
+              "query": [
+                {
+                  "key": "scope",
+                  "value": "inbox"
+                },
+                {
+                  "key": "category",
+                  "value": "PAYMENT",
+                  "description": "Filter by category: BROADCAST, PAYMENT, ACCOUNT"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Get notifications filtered by category (BROADCAST, PAYMENT, ACCOUNT)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Notifications by Event Type",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications?scope=inbox&eventType=PAYMENT_RECEIVED&page=1&pageSize=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications"],
+              "query": [
+                {
+                  "key": "scope",
+                  "value": "inbox"
+                },
+                {
+                  "key": "eventType",
+                  "value": "PAYMENT_RECEIVED",
+                  "description": "Filter by event type: MANUAL, PAYMENT_RECEIVED, PAYMENT_FAILED, USER_REGISTERED"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Get notifications filtered by event type."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Mark as Read",
+      "item": [
+        {
+          "name": "Mark Notification as Read",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/{{notificationId}}/read",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications", "{{notificationId}}", "read"],
+              "variable": [
+                {
+                  "key": "notificationId",
+                  "value": "{{notificationId}}",
+                  "description": "Notification ID to mark as read"
+                }
+              ]
+            },
+            "description": "Mark a specific notification as read. Only the recipient can mark their own notifications as read."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "FCM Token Management",
+      "item": [
+        {
+          "name": "Update FCM Token",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fcmToken\": \"your_fcm_token_here\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/update-profile/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "users", "update-profile", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{userId}}",
+                  "description": "User ID (use your own ID or admin can update any user)"
+                }
+              ]
+            },
+            "description": "Update FCM token for push notifications. This endpoint uses the existing update-profile endpoint. Include fcmToken in the request body along with other profile fields if needed."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Payment Notifications",
+      "item": [
+        {
+          "name": "Payment Notification (Automatic)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications?scope=inbox&category=PAYMENT&eventType=PAYMENT_RECEIVED",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications"],
+              "query": [
+                {
+                  "key": "scope",
+                  "value": "inbox"
+                },
+                {
+                  "key": "category",
+                  "value": "PAYMENT"
+                },
+                {
+                  "key": "eventType",
+                  "value": "PAYMENT_RECEIVED"
+                }
+              ]
+            },
+            "description": "Payment notifications are automatically created when:\n- RevenueCat webhook processes a payment event\n- User makes a payment\n- Payment status changes\n\nThis endpoint retrieves payment-related notifications. Push notifications are sent automatically when payment events occur."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "New User Registration Notifications",
+      "item": [
+        {
+          "name": "Registration Notification (Automatic)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications?scope=inbox&category=ACCOUNT&eventType=USER_REGISTERED",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications"],
+              "query": [
+                {
+                  "key": "scope",
+                  "value": "inbox"
+                },
+                {
+                  "key": "category",
+                  "value": "ACCOUNT"
+                },
+                {
+                  "key": "eventType",
+                  "value": "USER_REGISTERED"
+                }
+              ]
+            },
+            "description": "Registration notifications are automatically created when:\n- New user verifies OTP and activates account\n- User completes registration\n\nThis endpoint retrieves registration-related notifications. Push notifications are sent automatically to both the new user and admins."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
+

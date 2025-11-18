@@ -37,6 +37,9 @@ model User {
   // New field for testing update functionality
   bio          String?
   
+  // FCM token for push notifications
+  fcmToken     String?
+  
   // Account deletion tracking
   isDeleted    Boolean   @default(false)
   deletedAt    DateTime?
@@ -49,6 +52,8 @@ model User {
   mediaLibrary     MediaLibrary[]
   favoriteMessages UserMessageFavorite[]
   revenueCatPayments RevenueCatPayment[]
+  notificationsReceived Notification[] @relation("NotificationRecipient")
+  notificationsSent Notification[]     @relation("NotificationSender")
 
   @@map("users")
 }
@@ -384,6 +389,47 @@ model RevenueCatPayment {
   appId                 String?  // RevenueCat app ID
   
   @@map("revenuecat_payments")
+}
+
+model Notification {
+  id              String                        @id @default(cuid())
+  createdAt       DateTime                      @default(now())
+  updatedAt       DateTime                      @updatedAt
+  title           String
+  message         String                        @db.Text
+  category        NotificationCategory          @default(BROADCAST)
+  eventType       NotificationEvent             @default(MANUAL)
+  deliveryStatus  NotificationDeliveryStatus    @default(PENDING)
+  metadata        Json?
+  readAt          DateTime?
+  deliveredAt     DateTime?
+  recipientId     String?
+  recipient       User?                         @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  sentById        String?
+  sentBy          User?                         @relation("NotificationSender", fields: [sentById], references: [id], onDelete: SetNull)
+
+  @@map("notifications")
+}
+
+enum NotificationCategory {
+  BROADCAST
+  PAYMENT
+  ACCOUNT
+  SYSTEM
+}
+
+enum NotificationEvent {
+  MANUAL
+  PAYMENT_RECEIVED
+  PAYMENT_FAILED
+  USER_REGISTERED
+}
+
+enum NotificationDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+  READ
 }
 
 model ChatSettings {

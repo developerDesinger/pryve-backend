@@ -6,6 +6,7 @@ const HttpStatusCodes = require("../enums/httpStatusCode");
 const { createJwtToken } = require("../middlewares/auth.middleware");
 const { s3SharpImageUpload } = require("../services/aws.service");
 const { sendEmail, sendForgotPasswordEmail } = require("../utils/email");
+const NotificationService = require("./notification.service");
 
 class UserService {
   static async createUser(data) {
@@ -146,6 +147,8 @@ class UserService {
       where: { id: user.id },
       data: { status: "ACTIVE" },
     });
+
+    await NotificationService.notifyNewUserRegistration(updatedUser);
 
     const token = createJwtToken({ id: user.id, role: user.role });
 
