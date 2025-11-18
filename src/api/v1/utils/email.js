@@ -1,82 +1,89 @@
-const nodemailer = require("nodemailer");
+// Import Postmark service
+const postmarkService = require("../services/postmark.service");
 require("dotenv").config();
-const { logStatusCheckInstructions } = require("./emailStatus");
 
-// Create Office365 SMTP transporter
-const createTransporter = () => {
-  const config = {
-    host: "smtp.office365.com",
-    port: 587,
-    secure: false, // STARTTLS
-    auth: {
-      user: process.env.SMTP_USERNAME,
-      pass: process.env.SMTP_PASSWORD
-    },
-    requireTLS: true,
-    name: "mail.pryvegroup.com"
-  };
+// ============================================================================
+// OFFICE365 SMTP - COMMENTED OUT (Now using Postmark)
+// ============================================================================
+// const nodemailer = require("nodemailer");
+// const { logStatusCheckInstructions } = require("./emailStatus");
 
-  console.log(`🔧 [OFFICE365] Creating transporter with config:`, {
-    host: config.host,
-    port: config.port,
-    secure: config.secure,
-    username: config.auth.user,
-    hasPassword: !!config.auth.pass
-  });
+// // Create Office365 SMTP transporter
+// const createTransporter = () => {
+//   const config = {
+//     host: "smtp.office365.com",
+//     port: 587,
+//     secure: false, // STARTTLS
+//     auth: {
+//       user: process.env.SMTP_USERNAME,
+//       pass: process.env.SMTP_PASSWORD
+//     },
+//     requireTLS: true,
+//     name: "mail.pryvegroup.com"
+//   };
 
-  return nodemailer.createTransport(config);
-};
+//   console.log(`🔧 [OFFICE365] Creating transporter with config:`, {
+//     host: config.host,
+//     port: config.port,
+//     secure: config.secure,
+//     username: config.auth.user,
+//     hasPassword: !!config.auth.pass
+//   });
 
-// Send email using Office365
-const sendEmailWithOffice365 = async (mailOptions) => {
-  try {
-    const transporter = createTransporter();
+//   return nodemailer.createTransport(config);
+// };
+
+// // Send email using Office365
+// const sendEmailWithOffice365 = async (mailOptions) => {
+//   try {
+//     const transporter = createTransporter();
     
-    // Verify connection
-    console.log(`🔍 [OFFICE365] Verifying connection...`);
-    await transporter.verify();
-    console.log(`✅ [OFFICE365] Connection verified successfully`);
+//     // Verify connection
+//     console.log(`🔍 [OFFICE365] Verifying connection...`);
+//     await transporter.verify();
+//     console.log(`✅ [OFFICE365] Connection verified successfully`);
     
-    // Send email
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`✅ [OFFICE365] Email sent successfully`);
-    console.log(`📧 [OFFICE365] Message ID: ${info.messageId}`);
-    console.log(`📧 [OFFICE365] Response: ${info.response}`);
+//     // Send email
+//     const info = await transporter.sendMail(mailOptions);
+//     console.log(`✅ [OFFICE365] Email sent successfully`);
+//     console.log(`📧 [OFFICE365] Message ID: ${info.messageId}`);
+//     console.log(`📧 [OFFICE365] Response: ${info.response}`);
     
-    // Check if email was accepted by server
-    if (info.response && info.response.includes('250')) {
-      console.log(`✅ [OFFICE365] Email accepted by server`);
-      // Log status check instructions if recipient email is available
-      if (mailOptions.to) {
-        logStatusCheckInstructions(info.messageId, mailOptions.to);
-      }
-      console.log(`⚠️ [OFFICE365] IMPORTANT: If recipient doesn't receive email:`);
-      console.log(`   1. Check spam/junk folder`);
-      console.log(`   2. Check Office365 message trace using Message ID above`);
-      console.log(`   3. Verify email address is correct (no typos)`);
-      console.log(`   4. Wait 5-15 minutes for delivery`);
-    } else {
-      console.warn(`⚠️ [OFFICE365] Unexpected server response: ${info.response}`);
-    }
+//     // Check if email was accepted by server
+//     if (info.response && info.response.includes('250')) {
+//       console.log(`✅ [OFFICE365] Email accepted by server`);
+//       // Log status check instructions if recipient email is available
+//       if (mailOptions.to) {
+//         logStatusCheckInstructions(info.messageId, mailOptions.to);
+//       }
+//       console.log(`⚠️ [OFFICE365] IMPORTANT: If recipient doesn't receive email:`);
+//       console.log(`   1. Check spam/junk folder`);
+//       console.log(`   2. Check Office365 message trace using Message ID above`);
+//       console.log(`   3. Verify email address is correct (no typos)`);
+//       console.log(`   4. Wait 5-15 minutes for delivery`);
+//     } else {
+//       console.warn(`⚠️ [OFFICE365] Unexpected server response: ${info.response}`);
+//     }
     
-    // Return info with messageId for tracking
-    return {
-      ...info,
-      messageId: info.messageId,
-      canCheckStatus: true,
-      checkStatusCommand: `node check-email-status.js "${info.messageId}"`
-    };
+//     // Return info with messageId for tracking
+//     return {
+//       ...info,
+//       messageId: info.messageId,
+//       canCheckStatus: true,
+//       checkStatusCommand: `node check-email-status.js "${info.messageId}"`
+//     };
     
-  } catch (error) {
-    console.error(`❌ [OFFICE365] Email sending failed:`, error.message);
-    console.error(`❌ [OFFICE365] Error code:`, error.code);
-    console.error(`❌ [OFFICE365] Error command:`, error.command);
-    if (error.response) {
-      console.error(`❌ [OFFICE365] Server response:`, error.response);
-    }
-    throw new Error(`Office365 email failed: ${error.message}`);
-  }
-};
+//   } catch (error) {
+//     console.error(`❌ [OFFICE365] Email sending failed:`, error.message);
+//     console.error(`❌ [OFFICE365] Error code:`, error.code);
+//     console.error(`❌ [OFFICE365] Error command:`, error.command);
+//     if (error.response) {
+//       console.error(`❌ [OFFICE365] Server response:`, error.response);
+//     }
+//     throw new Error(`Office365 email failed: ${error.message}`);
+//   }
+// };
+// ============================================================================
 
 // Simple email validation
 const isValidEmail = (email) => {
@@ -126,67 +133,13 @@ const sendEmail = async (options) => {
     return;
   }
 
-  // Plain text version for better deliverability
-  const textTemplate = `Hello,
-
-Your One-Time Password (OTP) for verification is: ${options.otp}
-
-Please enter this code to complete your verification process.
-
-If you did not request this OTP, please ignore this email.
-
-For any assistance, contact us at contact@pryvegroup.com.
-
-Best regards,
-The Pryve Team`;
-
-  // HTML Email Verification Template
-  const htmlTemplate = `  
- <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-  <div style="background-color: #f4f4f4; padding: 20px; text-align: center;">
-    <h2 style="color: #50483f; margin: 0;">Pryve</h2>
-  </div>
-  <div style="background-color: #ffffff; padding: 20px; text-align: center;">
-    <p>Hello,</p>
-    <p>Your One-Time Password (OTP) for verification is:</p>
-    <p style="font-size: 24px; font-weight: bold; color: #50483f; margin: 10px 0;">${options.otp}</p>
-    <p>Please enter this code to complete your verification process.</p>
-  </div>
-  <div style="background-color: #f4f4f4; padding: 20px; text-align: center;">
-    <p>If you did not request this OTP, please ignore this email.</p>
-    <p>For any assistance, contact us at <a href="mailto:contact@pryvegroup.com" style="color: #007bff; text-decoration: none;">contact@pryvegroup.com</a>.</p>
-    <p>Best regards,<br/>The Pryve Team</p>
-  </div>
-</div>
-`;
-
-  // Email options with improved headers for better deliverability
-  const mailOptions = {
-    to: options.email,
-    from: `"Pryve" <${process.env.FROM_EMAIL || "contact@pryvegroup.com"}>`,
-    replyTo: process.env.REPLY_TO_EMAIL || process.env.FROM_EMAIL || "contact@pryvegroup.com",
-    subject: options.subject || "Your OTP Code - Pryve",
-    text: textTemplate, // Plain text version
-    html: htmlTemplate, // HTML version
-    // Additional headers for better deliverability
-    headers: {
-      'X-Mailer': 'Pryve Email Service',
-      'X-Priority': '1',
-      'Importance': 'high',
-      'List-Unsubscribe': `<mailto:${process.env.FROM_EMAIL || "contact@pryvegroup.com"}?subject=unsubscribe>`,
-    },
-  };
-
-  console.log(`📧 [SEND EMAIL] Mail options prepared:`, {
-    to: mailOptions.to,
-    from: mailOptions.from,
-    replyTo: mailOptions.replyTo,
-    subject: mailOptions.subject,
-    htmlLength: mailOptions.html.length
-  });
-
+  // Use Postmark service to send OTP email
   try {
-    await sendEmailWithOffice365(mailOptions);
+    await postmarkService.sendOTPEmail({
+      email: options.email,
+      otp: options.otp,
+      subject: options.subject || "Your Pryve verification code",
+    });
     console.log(`✅ [SEND EMAIL] Email sent successfully to: ${options.email}`);
     return true;
   } catch (error) {
@@ -217,66 +170,13 @@ const sendForgotPasswordEmail = async (options) => {
     return;
   }
 
-  // Plain text version for better deliverability
-  const textTemplate = `Hello,
-
-We received a request to reset your password. Use the OTP below to reset your password:
-
-${options.otp}
-
-If you did not request a password reset, you can ignore this email. Your password will remain unchanged.
-
-For any assistance, contact us at contact@pryvegroup.com.
-
-Best regards,
-The Pryve Team`;
-
-  // Forgot Password Email Template
-  const htmlTemplate = `  
-  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-  <div style="background-color: #f4f4f4; padding: 20px; text-align: center;">
-    <h2 style="color: #50483f; margin: 0;">Pryve</h2>
-  </div>
-  <div style="background-color: #ffffff; padding: 20px; text-align: center;">
-    <p>Hello,</p>
-    <p>We received a request to reset your password. Use the OTP below to reset your password:</p>
-    <p style="font-size: 24px; font-weight: bold; color: #50483f; margin: 10px 0;">${options.otp}</p>
-    <p>If you did not request a password reset, you can ignore this email. Your password will remain unchanged.</p>
-  </div>
-  <div style="background-color: #f4f4f4; padding: 20px; text-align: center;">
-    <p>For any assistance, contact us at <a href="mailto:contact@pryvegroup.com" style="color: #007bff; text-decoration: none;">contact@pryvegroup.com</a>.</p>
-    <p>Best regards,<br/>The Pryve Team</p>
-  </div>
-</div>
-`;
-
-  // Email options with improved headers for better deliverability
-  const mailOptions = {
-    to: options.email,
-    from: `"Pryve" <${process.env.FROM_EMAIL || "contact@pryvegroup.com"}>`,
-    replyTo: process.env.REPLY_TO_EMAIL || process.env.FROM_EMAIL || "contact@pryvegroup.com",
-    subject: options.subject || "Reset Your Password - Pryve",
-    text: textTemplate, // Plain text version
-    html: htmlTemplate, // HTML version
-    // Additional headers for better deliverability
-    headers: {
-      'X-Mailer': 'Pryve Email Service',
-      'X-Priority': '1',
-      'Importance': 'high',
-      'List-Unsubscribe': `<mailto:${process.env.FROM_EMAIL || "contact@pryvegroup.com"}?subject=unsubscribe>`,
-    },
-  };
-
-  console.log(`🔐 [FORGOT PASSWORD] Mail options prepared:`, {
-    to: mailOptions.to,
-    from: mailOptions.from,
-    replyTo: mailOptions.replyTo,
-    subject: mailOptions.subject,
-    htmlLength: mailOptions.html.length
-  });
-
+  // Use Postmark service to send forgot password OTP email
   try {
-    await sendEmailWithOffice365(mailOptions);
+    await postmarkService.sendOTPEmail({
+      email: options.email,
+      otp: options.otp,
+      subject: options.subject || "Your Pryve verification code",
+    });
     console.log(`✅ [FORGOT PASSWORD] Forgot password email sent successfully to: ${options.email}`);
     return true;
   } catch (error) {
