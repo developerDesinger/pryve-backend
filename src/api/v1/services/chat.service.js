@@ -323,6 +323,18 @@ class ChatService {
   static async createChat(userId, data) {
     const { name, description, aiModel, systemPrompt, temperature } = data;
 
+    // Resolve system prompt: prefer request payload, otherwise pull from global AI config if active
+    let resolvedSystemPrompt = systemPrompt;
+    if (!resolvedSystemPrompt) {
+      const aiConfig = await prisma.aIConfig.findFirst({
+        select: { systemPrompt: true, systemPromptActive: true },
+      });
+
+      if (aiConfig?.systemPromptActive && aiConfig.systemPrompt) {
+        resolvedSystemPrompt = aiConfig.systemPrompt;
+      }
+    }
+
     const chat = await prisma.chat.create({
       data: {
         name: name || `Chat ${new Date().toLocaleDateString()}`,
@@ -330,7 +342,7 @@ class ChatService {
         type: "PERSONAL_AI",
         userId,
         aiModel: aiModel || "gpt-4o",
-        systemPrompt: systemPrompt || "You are a helpful AI assistant.",
+        systemPrompt: resolvedSystemPrompt || "You are a helpful AI assistant.",
         temperature: temperature || 0.7,
       },
     });
