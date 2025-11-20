@@ -7,6 +7,34 @@ const { createJwtToken } = require("../middlewares/auth.middleware");
 const { s3SharpImageUpload } = require("../services/aws.service");
 const { sendEmail, sendForgotPasswordEmail } = require("../utils/email");
 const NotificationService = require("./notification.service");
+const RevenueCatService = require("./revenuecat.service");
+const Logger = require("../utils/logger");
+
+const buildPaymentPayload = async (userId) => {
+  try {
+    const [activeSubscriptionResult, paymentsResult] = await Promise.all([
+      RevenueCatService.getActiveSubscription(userId),
+      RevenueCatService.getUserPayments(userId),
+    ]);
+
+    return {
+      hasActiveSubscription: activeSubscriptionResult.hasActiveSubscription,
+      activeSubscription: activeSubscriptionResult.data,
+      payments: paymentsResult.data || [],
+    };
+  } catch (error) {
+    Logger.error("Failed to fetch payment data for user.", {
+      userId,
+      error: error?.message,
+    });
+    return {
+      hasActiveSubscription: false,
+      activeSubscription: null,
+      payments: [],
+      error: "PAYMENT_DATA_UNAVAILABLE",
+    };
+  }
+};
 
 class UserService {
   static async createUser(data) {
@@ -298,11 +326,13 @@ class UserService {
     }
 
     const token = createJwtToken({ id: user.id, role: user.role });
+    const paymentData = await buildPaymentPayload(user.id);
     return {
       message: "Login successful.",
       success: true,
       user,
       token,
+      paymentData,
     };
   }
 
@@ -367,11 +397,13 @@ class UserService {
     }
 
     const token = createJwtToken({ id: user.id, role: user.role });
+    const paymentData = await buildPaymentPayload(user.id);
     return {
       message: "Social login successful.",
       success: true,
       user,
       token,
+      paymentData,
     };
   }
 
@@ -504,9 +536,12 @@ class UserService {
 
     if (!user) throw new AppError("User not found.", HttpStatusCodes.NOT_FOUND);
 
+    const paymentData = await buildPaymentPayload(userId);
+
     return {
       message: "User updated successfully.",
       user,
+      paymentData,
       success: true,
     };
   }
@@ -856,9 +891,12 @@ class UserService {
 
     if (!user) throw new AppError("User not found.", HttpStatusCodes.NOT_FOUND);
 
+    const paymentData = await buildPaymentPayload(userId);
+
     return {
       message: "User updated successfully.",
       user,
+      paymentData,
       success: true,
     };
   }
