@@ -90,6 +90,13 @@ const consecutiveWindow = (dates, streakLength) => {
   return null;
 };
 
+const getMaxTokenParam = (model, defaultTokens = 1000) => {
+  if (model?.toLowerCase().startsWith("gpt-5")) {
+    return { max_completion_tokens: defaultTokens };
+  }
+  return { max_tokens: defaultTokens };
+};
+
 const formatDuration = (start, end) => {
   if (!start || !end) return "Completed";
   const days = Math.max(1, Math.round((end - start) / MS_PER_DAY));
@@ -677,7 +684,7 @@ class ChatService {
             },
           ],
           temperature: chat.temperature,
-          max_tokens: 1000,
+          ...getMaxTokenParam(chat.aiModel),
         });
       } else {
         // Regular text completion
@@ -690,7 +697,7 @@ class ChatService {
           model: chat.aiModel,
           messages: messages,
           temperature: chat.temperature,
-          max_tokens: 1000,
+          ...getMaxTokenParam(chat.aiModel),
         });
       }
 
