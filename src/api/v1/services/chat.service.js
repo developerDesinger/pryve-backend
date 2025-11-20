@@ -344,7 +344,7 @@ class ChatService {
         description,
         type: "PERSONAL_AI",
         userId,
-        aiModel: aiModel || "gpt-4o",
+        aiModel: aiModel || "gpt-5.1",
         systemPrompt: finalSystemPrompt,
         temperature: temperature || 0.7,
       },
@@ -356,7 +356,7 @@ class ChatService {
       userId,
       systemPrompt: finalSystemPrompt,
       systemPromptSource: systemPrompt ? "user-provided" : (resolvedSystemPrompt ? "global-config" : "default"),
-      aiModel: aiModel || "gpt-4o",
+      aiModel: aiModel || "gpt-5.1",
       temperature: temperature || 0.7,
     });
 
@@ -1139,6 +1139,11 @@ class ChatService {
           id: "gpt-4o-mini",
           name: "GPT-4o Mini",
           description: "Faster and cheaper GPT-4o",
+        },
+        {
+          id: "gpt-5.1",
+          name: "GPT-5.1",
+          description: "Next generation AI model",
         },
       ],
     };
