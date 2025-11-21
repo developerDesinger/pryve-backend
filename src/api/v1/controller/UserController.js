@@ -149,6 +149,13 @@ class UserController {
     const result = await UserService.deleteOwnAccount(userId);
     return res.status(200).json(result);
   });
+
+  static adminDeleteUserByEmail = catchAsyncHandler(async (req, res) => {
+    const { email, code } = req.body;
+    
+    const result = await UserService.adminDeleteUserByEmail({ email, code });
+    return res.status(200).json(result);
+  });
 }
 
 module.exports = UserController;

@@ -79,6 +79,7 @@ class UserService {
           otp,
           profilePhoto,
           otpCreatedAt: new Date(),
+          queryCount: 20, // Initialize with 20 free queries
         },
       });
     }
@@ -368,6 +369,7 @@ class UserService {
           profilePhoto,
           firstName,
           lastName,
+          queryCount: 20, // Initialize with 20 free queries
         },
       });
     } else {
@@ -898,6 +900,94 @@ class UserService {
       user,
       paymentData,
       success: true,
+    };
+  }
+
+  /**
+   * Admin method to delete all user data by email
+   * Requires admin code verification
+   * @param {Object} data - { email, code }
+   * @returns {Promise<Object>} - Deletion result
+   */
+  static async adminDeleteUserByEmail(data) {
+    const { email, code } = data;
+
+    // Verify admin code
+    if (code !== "@Admin123") {
+      throw new AppError(
+        "Invalid admin code. Access denied.",
+        HttpStatusCodes.FORBIDDEN
+      );
+    }
+
+    if (!email) {
+      throw new AppError(
+        "Email is required.",
+        HttpStatusCodes.BAD_REQUEST
+      );
+    }
+
+    // Find user by email
+    const user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase().trim() },
+    });
+
+    if (!user) {
+      // Even if user doesn't exist, check for orphaned payment records
+      const orphanedPayments = await prisma.revenueCatPayment.findMany({
+        where: { appUserId: email.toLowerCase().trim() },
+      });
+
+      if (orphanedPayments.length > 0) {
+        // Delete orphaned payment records
+        await prisma.revenueCatPayment.deleteMany({
+          where: { appUserId: email.toLowerCase().trim() },
+        });
+
+        return {
+          message: `User not found, but deleted ${orphanedPayments.length} orphaned payment record(s) for email: ${email}`,
+          success: true,
+          deletedPayments: orphanedPayments.length,
+        };
+      }
+
+      return {
+        message: `No user or payment records found for email: ${email}`,
+        success: true,
+        deletedUser: false,
+        deletedPayments: 0,
+      };
+    }
+
+    const userId = user.id;
+    const userEmail = user.email;
+
+    // Delete all RevenueCatPayment records by appUserId (email) first
+    // This handles cases where payments might be orphaned or not properly linked
+    const deletedPaymentsByEmail = await prisma.revenueCatPayment.deleteMany({
+      where: { appUserId: userEmail },
+    });
+
+    // Delete user - this will cascade delete all related data:
+    // - chats (cascade)
+    // - messages (cascade)
+    // - messageReactions (cascade)
+    // - readReceipts (cascade)
+    // - mediaLibrary (cascade)
+    // - favoriteMessages (cascade)
+    // - revenueCatPayments (cascade)
+    // - notificationsReceived (cascade)
+    // - notificationsSent (setNull)
+    await prisma.user.delete({
+      where: { id: userId },
+    });
+
+    return {
+      message: `Successfully deleted all data for user: ${email}`,
+      success: true,
+      deletedUser: true,
+      deletedPayments: deletedPaymentsByEmail.count,
+      userId: userId,
     };
   }
 }

@@ -13,6 +13,7 @@ router.post("/forgot-password", UserController.forgotPassword);
 router.post("/update-password", UserController.updatePassword);
 router.post("/change-password", isAuthenticated, UserController.changePassword);
 router.delete("/delete-account", isAuthenticated, UserController.deleteOwnAccount);
+router.post("/admin/delete-by-email", UserController.adminDeleteUserByEmail);
 
 // Profile management routes
 

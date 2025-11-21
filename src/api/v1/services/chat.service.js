@@ -5,6 +5,7 @@ const HttpStatusCodes = require("../enums/httpStatusCode");
 const MediaLibraryService = require("./mediaLibrary.service");
 const EmotionDetectionService = require("../utils/emotionDetection");
 const Logger = require("../utils/logger");
+const RevenueCatService = require("./revenuecat.service");
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -451,6 +452,37 @@ class ChatService {
       throw new AppError("Chat not found.", HttpStatusCodes.NOT_FOUND);
     }
 
+    // Check user's query count before processing (skip for premium users)
+    const userForQueryCheck = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { queryCount: true },
+    });
+
+    if (!userForQueryCheck) {
+      throw new AppError("User not found.", HttpStatusCodes.NOT_FOUND);
+    }
+
+    // Check if user has active subscription (premium users bypass query limit)
+    const subscriptionCheck = await RevenueCatService.getActiveSubscription(userId);
+    const hasActiveSubscription = subscriptionCheck.hasActiveSubscription;
+
+    // Only check query limit for free users
+    if (!hasActiveSubscription) {
+      // Check if user has queries remaining
+      if (userForQueryCheck.queryCount <= 0) {
+        throw new AppError(
+          "You have reached your free query limit. Please upgrade to continue.",
+          HttpStatusCodes.FORBIDDEN
+        );
+      }
+
+      // Decrement query count by 1 for free users
+      await prisma.user.update({
+        where: { id: userId },
+        data: { queryCount: { decrement: 1 } },
+      });
+    }
+
     // Determine message type based on provided files
     let messageType = "TEXT";
     let mediaType = null;
@@ -582,18 +614,18 @@ class ChatService {
     }
 
     // Inject zodiac from user's birthday
-    const user = await prisma.user.findUnique({
+    const userForZodiac = await prisma.user.findUnique({
       where: { id: userId },
       select: { dateOfBirth: true },
     });
-    const zodiac = getZodiacSign(user?.dateOfBirth);
+    const zodiac = getZodiacSign(userForZodiac?.dateOfBirth);
     if (zodiac) {
       messages.unshift({ role: "system", content: `User Zodiac: ${zodiac} ` });
     }
-    if (user?.dateOfBirth) {
+    if (userForZodiac?.dateOfBirth) {
       messages.unshift({
         role: "system",
-        content: `User Birthdate: ${user.dateOfBirth}`,
+        content: `User Birthdate: ${userForZodiac.dateOfBirth}`,
       });
     }
 
@@ -613,7 +645,7 @@ class ChatService {
       aiConfigActive: aiConfig?.systemPromptActive || false,
       chatSystemPrompt: chat.systemPrompt || null,
       zodiac: zodiac || null,
-      birthdate: user?.dateOfBirth || null,
+      birthdate: userForZodiac?.dateOfBirth || null,
     });
 
     // Log full messages array (for debugging)
