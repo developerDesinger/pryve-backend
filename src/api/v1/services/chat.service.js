@@ -507,7 +507,9 @@ class ChatService {
     }
 
     // Save file to media library if present
+    // IMPORTANT: Save a copy of the buffer before saving to disk, as we need it for OpenAI API
     let mediaRecord = null;
+    let fileBufferForOpenAI = null;
     if (imageFile || audioFile || videoFile) {
       const fileToSave = imageFile || audioFile || videoFile;
       console.log("=== ChatService.sendMessage - File Upload ===");
@@ -518,6 +520,12 @@ class ChatService {
         hasBuffer: !!fileToSave?.buffer,
       });
       console.log("File type detected:", messageType);
+      
+      // Preserve buffer for OpenAI API before saving to disk
+      if (fileToSave?.buffer) {
+        fileBufferForOpenAI = Buffer.from(fileToSave.buffer);
+      }
+      
       mediaRecord = await MediaLibraryService.saveFile(
         fileToSave,
         userId,
@@ -569,11 +577,14 @@ class ChatService {
       take: 20, // Get last 20 messages for context
     });
 
-    // Convert to OpenAI format
-    const messages = previousMessages.map((msg) => ({
-      role: msg.isFromAI ? "assistant" : "user",
-      content: msg.content,
-    }));
+    // Convert to OpenAI format, filtering out messages with null/empty content
+    // This prevents errors when image-only or media-only messages are in the history
+    const messages = previousMessages
+      .filter((msg) => msg.content && msg.content.trim().length > 0)
+      .map((msg) => ({
+        role: msg.isFromAI ? "assistant" : "user",
+        content: msg.content,
+      }));
 
     // Get system prompt from AI Config table (database) - priority over chat.systemPrompt
     let systemPromptToUse = null;
@@ -673,8 +684,15 @@ class ChatService {
 
       if (imageFile) {
         // Use OpenAI Vision API for images
+        // Use preserved buffer or fallback to imageFile.buffer
+        const bufferToUse = fileBufferForOpenAI || imageFile.buffer;
+        
+        if (!bufferToUse) {
+          throw new Error("Image buffer is not available for OpenAI API call");
+        }
+        
         // Convert file buffer to base64 for OpenAI
-        const base64Image = imageFile.buffer.toString("base64");
+        const base64Image = bufferToUse.toString("base64");
         const imageUrl = `data:${imageFile.mimetype};base64,${base64Image}`;
 
         const visionMessages = [
@@ -691,6 +709,7 @@ class ChatService {
           },
         ];
 
+        console.log("Calling OpenAI Vision API with model: gpt-4o");
         completion = await openai.chat.completions.create({
           model: "gpt-4o", // Updated to use the current vision model
           messages: visionMessages,
@@ -698,8 +717,16 @@ class ChatService {
         });
       } else if (audioFile) {
         // Use OpenAI Whisper API for audio transcription
+        // Use preserved buffer or fallback to audioFile.buffer
+        const bufferToUse = fileBufferForOpenAI || audioFile.buffer;
+        
+        if (!bufferToUse) {
+          throw new Error("Audio buffer is not available for OpenAI API call");
+        }
+        
+        console.log("Calling OpenAI Whisper API for transcription");
         const transcription = await openai.audio.transcriptions.create({
-          file: audioFile.buffer, // Use file buffer directly
+          file: bufferToUse, // Use preserved buffer
           model: "whisper-1",
         });
 
@@ -754,6 +781,21 @@ class ChatService {
       }
     } catch (error) {
       console.error("OpenAI API Error:", error);
+      console.error("Error details:", {
+        message: error.message,
+        status: error.status,
+        statusText: error.statusText,
+        response: error.response?.data || error.response,
+        code: error.code,
+        type: error.type,
+        stack: error.stack,
+      });
+
+      // Create error message with more details for debugging
+      const errorMessage = error.message || "Unknown error occurred";
+      const errorDetails = error.response?.data || error.response || {};
+      
+      console.error("Full error object:", JSON.stringify(errorDetails, null, 2));
 
       // Create error message
       aiResponse = await prisma.message.create({
