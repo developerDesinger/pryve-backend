@@ -12,7 +12,8 @@ router.post("/resend-otp", UserController.resendOtp);
 router.post("/forgot-password", UserController.forgotPassword);
 router.post("/update-password", UserController.updatePassword);
 router.post("/change-password", isAuthenticated, UserController.changePassword);
-router.delete("/delete-account", isAuthenticated, UserController.deleteOwnAccount);
+router.delete("/delete-account", isAuthenticated, UserController.deleteAccount);
+router.delete("/delete-account-full", isAuthenticated, UserController.deleteOwnAccount);
 router.delete("/permanently-delete", isAuthenticated, UserController.permanentlyDeleteUser);
 router.post("/admin/delete-by-email", UserController.adminDeleteUserByEmail);
 

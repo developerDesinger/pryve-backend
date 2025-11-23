@@ -124,6 +124,14 @@ class UserService {
       updateFields.password = await bcrypt.hash(updateFields.password, 10);
     }
 
+    // Handle isDeleted field - if setting to true, also set deletedAt
+    if (updateFields.isDeleted === true) {
+      updateFields.deletedAt = new Date();
+      updateFields.status = "INACTIVE";
+    } else if (updateFields.isDeleted === false) {
+      updateFields.deletedAt = null;
+    }
+
     // Update user
     const updatedUser = await prisma.user.update({
       where: { id: userId },
@@ -526,9 +534,20 @@ class UserService {
   }
 
   static async updateUser(userId, updateData) {
+    // Prepare update data
+    const updateFields = { ...updateData };
+
+    // Handle isDeleted field - if setting to true, also set deletedAt
+    if (updateFields.isDeleted === true) {
+      updateFields.deletedAt = new Date();
+      updateFields.status = "INACTIVE";
+    } else if (updateFields.isDeleted === false) {
+      updateFields.deletedAt = null;
+    }
+
     const updatedUser = await prisma.user.update({
       where: { id: userId },
-      data: updateData,
+      data: updateFields,
     });
 
     if (!updatedUser) {
@@ -579,6 +598,51 @@ class UserService {
       message: "user deactivated successfully",
       success: true,
     };
+  }
+
+  /**
+   * Simple delete account - just sets isDeleted to true
+   * This is a simpler version that only marks the user as deleted
+   */
+  static async deleteAccount(userId) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new AppError("User not found", HttpStatusCodes.NOT_FOUND);
+    }
+
+    // Check if already deleted
+    if (user.isDeleted) {
+      throw new AppError("Account already deleted", HttpStatusCodes.BAD_REQUEST);
+    }
+
+    try {
+      const now = new Date();
+
+      // Simply mark user as deleted
+      const updatedUser = await prisma.user.update({
+        where: { id: userId },
+        data: {
+          isDeleted: true,
+          deletedAt: now,
+          status: "INACTIVE",
+        },
+      });
+
+      return {
+        message: "Account deleted successfully.",
+        success: true,
+        user: updatedUser,
+      };
+    } catch (error) {
+      console.error("Error deleting account:", error);
+      throw new AppError(
+        "Failed to delete account. Please try again.",
+        HttpStatusCodes.INTERNAL_SERVER_ERROR
+      );
+    }
   }
 
   static async deleteOwnAccount(userId) {

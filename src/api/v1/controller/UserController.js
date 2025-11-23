@@ -143,6 +143,13 @@ class UserController {
     return res.status(200).json(result);
   });
 
+  static deleteAccount = catchAsyncHandler(async (req, res) => {
+    const { id: userId } = req.user; // Get user ID from token
+    
+    const result = await UserService.deleteAccount(userId);
+    return res.status(200).json(result);
+  });
+
   static deleteOwnAccount = catchAsyncHandler(async (req, res) => {
     const { id: userId } = req.user; // Get user ID from token
     
