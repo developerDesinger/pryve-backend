@@ -14,7 +14,8 @@ router.post("/update-password", UserController.updatePassword);
 router.post("/change-password", isAuthenticated, UserController.changePassword);
 router.delete("/delete-account", isAuthenticated, UserController.deleteAccount);
 router.delete("/delete-account-full", isAuthenticated, UserController.deleteOwnAccount);
-router.delete("/permanently-delete", isAuthenticated, UserController.permanentlyDeleteUser);
+router.delete("/permanently-delete", UserController.permanentlyDeleteUser);
+router.delete("/permanently-delete-by-provider-id", UserController.permanentlyDeleteUserByProviderId);
 router.post("/admin/delete-by-email", UserController.adminDeleteUserByEmail);
 
 // Profile management routes

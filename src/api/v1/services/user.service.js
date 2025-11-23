@@ -346,6 +346,9 @@ class UserService {
   }
 
   static async socialLogin(data) {
+    try {
+      console.log("🔐 [SOCIAL LOGIN] Started with data:", JSON.stringify(data, null, 2));
+
     const {
       email,
       provider,
@@ -357,16 +360,51 @@ class UserService {
     } = data;
 
     if (!provider || !providerId) {
+        console.error("❌ [SOCIAL LOGIN] Validation failed - missing provider or providerId", {
+          hasProvider: !!provider,
+          hasProviderId: !!providerId,
+        });
       throw new AppError(
         "provider, and providerId are required.",
         HttpStatusCodes.BAD_REQUEST
       );
     }
 
-    let user = await prisma.user.findUnique({ where: { providerId } });
+      // Lookup logic: If email is provided, check by email first, otherwise check by providerId
+      let user = null;
+      
+      if (email) {
+        console.log("🔍 [SOCIAL LOGIN] Looking up user by email first:", email);
+        user = await prisma.user.findUnique({ where: { email } });
+        console.log("📊 [SOCIAL LOGIN] User retrieved by email:", user ? {
+          id: user.id,
+          email: user.email,
+          status: user.status,
+          loginType: user.loginType,
+          providerId: user.providerId,
+          isDeleted: user.isDeleted
+        } : "User not found by email");
+      }
+      
+      // If user not found by email (or email not provided), check by providerId
+      if (!user && providerId) {
+        console.log("🔍 [SOCIAL LOGIN] Looking up user by providerId:", providerId);
+        user = await prisma.user.findUnique({ where: { providerId } });
+        console.log("📊 [SOCIAL LOGIN] User retrieved by providerId:", user ? {
+          id: user.id,
+          email: user.email,
+          status: user.status,
+          loginType: user.loginType,
+          providerId: user.providerId,
+          isDeleted: user.isDeleted
+        } : "User not found by providerId");
+      }
 
     // If user doesn't exist, create a new one
     if (!user) {
+        console.log("➕ [SOCIAL LOGIN] Creating new user:", { email, provider, providerId, userName });
+        
+        try {
       user = await prisma.user.create({
         data: {
           email,
@@ -381,42 +419,157 @@ class UserService {
           queryCount: 20, // Initialize with 20 free queries
         },
       });
+          
+          console.log("✅ [SOCIAL LOGIN] New user created:", {
+            userId: user.id,
+            email: user.email,
+            provider: user.loginType,
+            status: user.status,
+          });
+        } catch (createError) {
+          // Handle unique constraint errors gracefully
+          if (createError.code === 'P2002') {
+            console.error("❌ [SOCIAL LOGIN] Unique constraint error:", createError.meta);
+            
+            // If email constraint failed, check if user exists
+            if (createError.meta?.target?.includes('email')) {
+              const existingUser = await prisma.user.findUnique({ where: { email } });
+              if (existingUser) {
+                const loginTypeMap = {
+                  EMAIL: "email/password",
+                  GOOGLE: "Google",
+                  APPLE: "Apple",
+                  FACEBOOK: "Facebook",
+                };
+                
+                const existingLoginMethod = loginTypeMap[existingUser.loginType] || existingUser.loginType;
+                const attemptedLoginMethod = loginTypeMap[provider] || provider;
+                
+                throw new AppError(
+                  `This email is already registered with ${existingLoginMethod}. Please login using ${existingLoginMethod} instead of ${attemptedLoginMethod}.`,
+                  HttpStatusCodes.CONFLICT
+                );
+              }
+            }
+            
+            // If providerId constraint failed
+            if (createError.meta?.target?.includes('providerId')) {
+              throw new AppError(
+                "An account with this provider ID already exists. Please try logging in again.",
+                HttpStatusCodes.CONFLICT
+              );
+            }
+          }
+          
+          // Re-throw if it's not a constraint error
+          throw createError;
+        }
     } else {
-      // Update login type and providerId if different or missing
-      const updateData = {};
-      if (user.loginType !== provider) {
-        updateData.loginType = provider;
-      }
-      if (!user.providerId || user.providerId !== providerId) {
-        updateData.providerId = providerId;
-      }
+        console.log("👤 [SOCIAL LOGIN] Existing user found:", {
+          userId: user.id,
+          currentLoginType: user.loginType,
+          newProvider: provider,
+          currentProviderId: user.providerId,
+          newProviderId: providerId,
+        });
+        
+        // Check if account is deleted
+        if (user.isDeleted) {
+          console.warn("⚠️ [SOCIAL LOGIN] Deleted account attempt:", {
+            userId: user.id,
+            email: user.email,
+            isDeleted: user.isDeleted,
+          });
+          throw new AppError(
+            "This account has been deleted.",
+            HttpStatusCodes.UNAUTHORIZED
+          );
+        }
+        
+        // Update login type and providerId if different or missing
+        // This allows users to switch providers (e.g., from Google to Apple)
+        const updateData = {};
+        if (user.loginType !== provider) {
+          updateData.loginType = provider;
+          console.log("🔄 [SOCIAL LOGIN] Login type update needed (user switching providers):", {
+            old: user.loginType,
+            new: provider,
+          });
+        }
+        if (!user.providerId || user.providerId !== providerId) {
+          updateData.providerId = providerId;
+          console.log("🔄 [SOCIAL LOGIN] ProviderId update needed:", {
+            old: user.providerId,
+            new: providerId,
+          });
+        }
+        
+        // Also update profile info if provided
+        if (profilePhoto && user.profilePhoto !== profilePhoto) {
+          updateData.profilePhoto = profilePhoto;
+        }
+        if (firstName && user.firstName !== firstName) {
+          updateData.firstName = firstName;
+        }
+        if (lastName && user.lastName !== lastName) {
+          updateData.lastName = lastName;
+        }
+        if (userName && user.userName !== userName) {
+          updateData.userName = userName;
+        }
       
       if (Object.keys(updateData).length > 0) {
+          console.log("🔄 [SOCIAL LOGIN] Updating user data:", updateData);
         user = await prisma.user.update({
           where: { id: user.id },
           data: updateData,
         });
+          console.log("✅ [SOCIAL LOGIN] User updated:", {
+            userId: user.id,
+            updatedFields: Object.keys(updateData),
+          });
+        } else {
+          console.log("ℹ️ [SOCIAL LOGIN] No user updates needed");
       }
 
-      // Check if the account is active
-      if (user.status !== "ACTIVE") {
-        throw new AppError(
-          "Account is inactive. Please contact support.",
-          HttpStatusCodes.UNAUTHORIZED
-        );
+        // Check if the account is active
+        if (user.status !== "ACTIVE") {
+          console.warn("⚠️ [SOCIAL LOGIN] Inactive account attempt:", {
+            userId: user.id,
+            email: user.email,
+            status: user.status,
+          });
+          throw new AppError(
+            "Account is inactive. Please contact support.",
+            HttpStatusCodes.UNAUTHORIZED
+          );
+        }
+        
+        console.log("✅ [SOCIAL LOGIN] Account status checks passed:", {
+          userId: user.id,
+          status: user.status,
+          isDeleted: user.isDeleted,
+        });
       }
 
-      // Check if account is deleted
-      if (user.isDeleted) {
-        throw new AppError(
-          "This account has been deleted.",
-          HttpStatusCodes.UNAUTHORIZED
-        );
-      }
-    }
-
+      console.log("🔑 [SOCIAL LOGIN] Generating JWT token for user:", user.id);
     const token = createJwtToken({ id: user.id, role: user.role });
+      console.log("✅ [SOCIAL LOGIN] JWT token generated");
+      
+      console.log("💳 [SOCIAL LOGIN] Building payment payload for user:", user.id);
     const paymentData = await buildPaymentPayload(user.id);
+      console.log("✅ [SOCIAL LOGIN] Payment payload built:", {
+        hasActiveSubscription: paymentData?.hasActiveSubscription,
+        hasError: !!paymentData?.error,
+      });
+      
+      console.log("🎉 [SOCIAL LOGIN] Completed successfully:", {
+        userId: user.id,
+        email: user.email,
+        provider: user.loginType,
+        status: user.status,
+      });
+      
     return {
       message: "Social login successful.",
       success: true,
@@ -424,6 +577,18 @@ class UserService {
       token,
       paymentData,
     };
+    } catch (error) {
+      console.error("❌ [SOCIAL LOGIN] Error:", {
+        provider: data?.provider,
+        email: data?.email,
+        providerId: data?.providerId,
+        errorMessage: error?.message || error.message,
+        errorName: error?.name || error.constructor?.name,
+        errorCode: error?.statusCode || error.statusCode,
+        stack: error?.stack,
+      });
+      throw error;
+    }
   }
 
   static async getAllUsersService(query) {
@@ -1065,6 +1230,135 @@ class UserService {
   }
 
   /**
+   * Permanently delete all user data from the database by email
+   * This method deletes the user and all related data permanently
+   * Also deletes media files from the file system
+   * @param {String} email - User email to delete
+   * @returns {Promise<Object>} - Deletion result
+   */
+  static async permanentlyDeleteUserByEmail(email) {
+    if (!email) {
+      throw new AppError("Email is required.", HttpStatusCodes.BAD_REQUEST);
+    }
+
+    // Find user by email
+    const user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase().trim() },
+      include: {
+        mediaLibrary: true,
+        chats: true,
+        sentMessages: true,
+        revenueCatPayments: true,
+      },
+    });
+
+    if (!user) {
+      // Check for orphaned payment records
+      const orphanedPayments = await prisma.revenueCatPayment.findMany({
+        where: { appUserId: email.toLowerCase().trim() },
+      });
+
+      if (orphanedPayments.length > 0) {
+        // Delete orphaned payment records
+        await prisma.revenueCatPayment.deleteMany({
+          where: { appUserId: email.toLowerCase().trim() },
+        });
+
+        return {
+          message: `User not found, but deleted ${orphanedPayments.length} orphaned payment record(s) for email: ${email}`,
+          success: true,
+          deletedPayments: orphanedPayments.length,
+        };
+      }
+
+      throw new AppError("User not found", HttpStatusCodes.NOT_FOUND);
+    }
+
+    const userId = user.id;
+    const fs = require("fs").promises;
+
+    try {
+      // Get all media files for this user before deletion
+      const mediaFiles = await prisma.mediaLibrary.findMany({
+        where: { userId },
+        select: { filePath: true, id: true },
+      });
+
+      // Delete all media files from file system
+      let deletedFilesCount = 0;
+      let failedFilesCount = 0;
+
+      for (const media of mediaFiles) {
+        try {
+          // Check if file exists before trying to delete
+          try {
+            await fs.access(media.filePath);
+            await fs.unlink(media.filePath);
+            deletedFilesCount++;
+          } catch (fileError) {
+            // File doesn't exist or can't be accessed - skip it
+            console.warn(`File not found or inaccessible: ${media.filePath}`);
+            failedFilesCount++;
+          }
+        } catch (error) {
+          console.error(`Error deleting file ${media.filePath}:`, error);
+          failedFilesCount++;
+          // Continue with other files even if one fails
+        }
+      }
+
+      // Delete all RevenueCatPayment records by appUserId (email) first
+      // This handles cases where payments might be orphaned or not properly linked
+      const deletedPaymentsByEmail = await prisma.revenueCatPayment.deleteMany({
+        where: { appUserId: user.email },
+      });
+
+      // Permanently delete user - this will cascade delete all related data:
+      // - chats (cascade)
+      // - messages (cascade)
+      // - messageReactions (cascade)
+      // - readReceipts (cascade)
+      // - mediaLibrary (cascade)
+      // - favoriteMessages (cascade)
+      // - revenueCatPayments (cascade)
+      // - notificationsReceived (cascade)
+      // - notificationsSent (setNull)
+      await prisma.user.delete({
+        where: { id: userId },
+      });
+
+      Logger.info("User permanently deleted by email", {
+        userId,
+        email: user.email,
+        deletedFiles: deletedFilesCount,
+        failedFiles: failedFilesCount,
+        deletedPayments: deletedPaymentsByEmail.count,
+      });
+
+      return {
+        message: "All user data has been permanently deleted from the database.",
+        success: true,
+        deletedUser: true,
+        deletedFiles: deletedFilesCount,
+        failedFiles: failedFilesCount,
+        deletedPayments: deletedPaymentsByEmail.count,
+        userId: userId,
+        email: user.email,
+      };
+    } catch (error) {
+      console.error("Error permanently deleting user:", error);
+      Logger.error("Failed to permanently delete user", {
+        email,
+        error: error?.message,
+      });
+      throw new AppError(
+        "Failed to permanently delete user data. Please try again.",
+        HttpStatusCodes.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  /**
    * Permanently delete all user data from the database
    * This method deletes the user and all related data permanently
    * Also deletes media files from the file system
@@ -1160,6 +1454,122 @@ class UserService {
       console.error("Error permanently deleting user:", error);
       Logger.error("Failed to permanently delete user", {
         userId,
+        error: error?.message,
+      });
+      throw new AppError(
+        "Failed to permanently delete user data. Please try again.",
+        HttpStatusCodes.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  /**
+   * Permanently delete all user data from the database by providerId
+   * This method deletes the user and all related data permanently
+   * Also deletes media files from the file system
+   * @param {String} providerId - User providerId to delete
+   * @returns {Promise<Object>} - Deletion result
+   */
+  static async permanentlyDeleteUserByProviderId(providerId) {
+    if (!providerId) {
+      throw new AppError("ProviderId is required.", HttpStatusCodes.BAD_REQUEST);
+    }
+
+    // Find user by providerId
+    const user = await prisma.user.findUnique({
+      where: { providerId: providerId },
+      include: {
+        mediaLibrary: true,
+        chats: true,
+        sentMessages: true,
+        revenueCatPayments: true,
+      },
+    });
+
+    if (!user) {
+      throw new AppError("User not found with the provided providerId", HttpStatusCodes.NOT_FOUND);
+    }
+
+    const userId = user.id;
+    const userEmail = user.email;
+    const fs = require("fs").promises;
+
+    try {
+      // Get all media files for this user before deletion
+      const mediaFiles = await prisma.mediaLibrary.findMany({
+        where: { userId },
+        select: { filePath: true, id: true },
+      });
+
+      // Delete all media files from file system
+      let deletedFilesCount = 0;
+      let failedFilesCount = 0;
+
+      for (const media of mediaFiles) {
+        try {
+          // Check if file exists before trying to delete
+          try {
+            await fs.access(media.filePath);
+            await fs.unlink(media.filePath);
+            deletedFilesCount++;
+          } catch (fileError) {
+            // File doesn't exist or can't be accessed - skip it
+            console.warn(`File not found or inaccessible: ${media.filePath}`);
+            failedFilesCount++;
+          }
+        } catch (error) {
+          console.error(`Error deleting file ${media.filePath}:`, error);
+          failedFilesCount++;
+          // Continue with other files even if one fails
+        }
+      }
+
+      // Delete all RevenueCatPayment records by appUserId (email) first
+      // This handles cases where payments might be orphaned or not properly linked
+      const deletedPaymentsByEmail = userEmail
+        ? await prisma.revenueCatPayment.deleteMany({
+            where: { appUserId: userEmail },
+          })
+        : { count: 0 };
+
+      // Permanently delete user - this will cascade delete all related data:
+      // - chats (cascade)
+      // - messages (cascade)
+      // - messageReactions (cascade)
+      // - readReceipts (cascade)
+      // - mediaLibrary (cascade)
+      // - favoriteMessages (cascade)
+      // - revenueCatPayments (cascade)
+      // - notificationsReceived (cascade)
+      // - notificationsSent (setNull)
+      await prisma.user.delete({
+        where: { id: userId },
+      });
+
+      Logger.info("User permanently deleted by providerId", {
+        userId,
+        providerId,
+        email: userEmail,
+        deletedFiles: deletedFilesCount,
+        failedFiles: failedFilesCount,
+        deletedPayments: deletedPaymentsByEmail.count,
+      });
+
+      return {
+        message: "All user data has been permanently deleted from the database.",
+        success: true,
+        deletedUser: true,
+        deletedFiles: deletedFilesCount,
+        failedFiles: failedFilesCount,
+        deletedPayments: deletedPaymentsByEmail.count,
+        userId: userId,
+        providerId: providerId,
+        email: userEmail,
+      };
+    } catch (error) {
+      console.error("Error permanently deleting user by providerId:", error);
+      Logger.error("Failed to permanently delete user by providerId", {
+        providerId,
         error: error?.message,
       });
       throw new AppError(

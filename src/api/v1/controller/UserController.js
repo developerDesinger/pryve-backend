@@ -37,7 +37,12 @@ class UserController {
 
   // Social Login
   static socialLoginUser = catchAsyncHandler(async (req, res) => {
+    console.log("🔐 [SOCIAL LOGIN] Request body:", JSON.stringify(req.body, null, 2));
+    
     const result = await UserService.socialLogin(req.body);
+    
+    console.log("✅ [SOCIAL LOGIN] Success - User ID:", result?.user?.id, "Email:", result?.user?.email);
+    
     return res.status(200).json(result);
   });
 
@@ -165,9 +170,30 @@ class UserController {
   });
 
   static permanentlyDeleteUser = catchAsyncHandler(async (req, res) => {
-    const { id: userId } = req.user; // Get user ID from token
+    const { email } = req.body; // Get email from request body
     
-    const result = await UserService.permanentlyDeleteUser(userId);
+    if (!email) {
+      return res.status(400).json({
+        message: "email is required in request body.",
+        success: false,
+      });
+    }
+    
+    const result = await UserService.permanentlyDeleteUserByEmail(email);
+    return res.status(200).json(result);
+  });
+
+  static permanentlyDeleteUserByProviderId = catchAsyncHandler(async (req, res) => {
+    const { providerId } = req.body; // Get providerId from request body
+    
+    if (!providerId) {
+      return res.status(400).json({
+        message: "providerId is required in request body.",
+        success: false,
+      });
+    }
+    
+    const result = await UserService.permanentlyDeleteUserByProviderId(providerId);
     return res.status(200).json(result);
   });
 }
