@@ -21,6 +21,7 @@ model User {
   otpCreatedAt DateTime  @default(now())
   userName     String?   @unique
   loginType    LoginType @default(EMAIL)
+  providerId   String?   @unique
   firstName    String?
   lastName     String?
   

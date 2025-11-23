@@ -364,6 +364,7 @@ class UserService {
           email,
           userName,
           loginType: provider,
+          providerId,
           role: "CLIENT", // Default role for new users
           status: "ACTIVE", // Default status for social login
           profilePhoto,
@@ -373,11 +374,19 @@ class UserService {
         },
       });
     } else {
-      // Update login type if different
+      // Update login type and providerId if different or missing
+      const updateData = {};
       if (user.loginType !== provider) {
+        updateData.loginType = provider;
+      }
+      if (!user.providerId || user.providerId !== providerId) {
+        updateData.providerId = providerId;
+      }
+      
+      if (Object.keys(updateData).length > 0) {
         user = await prisma.user.update({
           where: { id: user.id },
-          data: { loginType: provider },
+          data: updateData,
         });
       }
 
