@@ -348,14 +348,14 @@ class UserService {
       lastName,
     } = data;
 
-    if (!email || !provider || !providerId) {
+    if (!provider || !providerId) {
       throw new AppError(
-        "Email, provider, and providerId are required.",
+        "provider, and providerId are required.",
         HttpStatusCodes.BAD_REQUEST
       );
     }
 
-    let user = await prisma.user.findUnique({ where: { email } });
+    let user = await prisma.user.findUnique({ where: { providerId } });
 
     // If user doesn't exist, create a new one
     if (!user) {
@@ -989,6 +989,111 @@ class UserService {
       deletedPayments: deletedPaymentsByEmail.count,
       userId: userId,
     };
+  }
+
+  /**
+   * Permanently delete all user data from the database
+   * This method deletes the user and all related data permanently
+   * Also deletes media files from the file system
+   * @param {String} userId - User ID to delete
+   * @returns {Promise<Object>} - Deletion result
+   */
+  static async permanentlyDeleteUser(userId) {
+    const fs = require("fs").promises;
+
+    // Find user with all related data
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        mediaLibrary: true,
+        chats: true,
+        sentMessages: true,
+        revenueCatPayments: true,
+      },
+    });
+
+    if (!user) {
+      throw new AppError("User not found", HttpStatusCodes.NOT_FOUND);
+    }
+
+    try {
+      // Get all media files for this user before deletion
+      const mediaFiles = await prisma.mediaLibrary.findMany({
+        where: { userId },
+        select: { filePath: true, id: true },
+      });
+
+      // Delete all media files from file system
+      let deletedFilesCount = 0;
+      let failedFilesCount = 0;
+
+      for (const media of mediaFiles) {
+        try {
+          // Check if file exists before trying to delete
+          try {
+            await fs.access(media.filePath);
+            await fs.unlink(media.filePath);
+            deletedFilesCount++;
+          } catch (fileError) {
+            // File doesn't exist or can't be accessed - skip it
+            console.warn(`File not found or inaccessible: ${media.filePath}`);
+            failedFilesCount++;
+          }
+        } catch (error) {
+          console.error(`Error deleting file ${media.filePath}:`, error);
+          failedFilesCount++;
+          // Continue with other files even if one fails
+        }
+      }
+
+      // Delete all RevenueCatPayment records by appUserId (email) first
+      // This handles cases where payments might be orphaned or not properly linked
+      const deletedPaymentsByEmail = await prisma.revenueCatPayment.deleteMany({
+        where: { appUserId: user.email },
+      });
+
+      // Permanently delete user - this will cascade delete all related data:
+      // - chats (cascade)
+      // - messages (cascade)
+      // - messageReactions (cascade)
+      // - readReceipts (cascade)
+      // - mediaLibrary (cascade)
+      // - favoriteMessages (cascade)
+      // - revenueCatPayments (cascade)
+      // - notificationsReceived (cascade)
+      // - notificationsSent (setNull)
+      await prisma.user.delete({
+        where: { id: userId },
+      });
+
+      Logger.info("User permanently deleted", {
+        userId,
+        email: user.email,
+        deletedFiles: deletedFilesCount,
+        failedFiles: failedFilesCount,
+        deletedPayments: deletedPaymentsByEmail.count,
+      });
+
+      return {
+        message: "All user data has been permanently deleted from the database.",
+        success: true,
+        deletedUser: true,
+        deletedFiles: deletedFilesCount,
+        failedFiles: failedFilesCount,
+        deletedPayments: deletedPaymentsByEmail.count,
+        userId: userId,
+      };
+    } catch (error) {
+      console.error("Error permanently deleting user:", error);
+      Logger.error("Failed to permanently delete user", {
+        userId,
+        error: error?.message,
+      });
+      throw new AppError(
+        "Failed to permanently delete user data. Please try again.",
+        HttpStatusCodes.INTERNAL_SERVER_ERROR
+      );
+    }
   }
 }
 

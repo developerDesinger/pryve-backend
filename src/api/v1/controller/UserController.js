@@ -156,6 +156,13 @@ class UserController {
     const result = await UserService.adminDeleteUserByEmail({ email, code });
     return res.status(200).json(result);
   });
+
+  static permanentlyDeleteUser = catchAsyncHandler(async (req, res) => {
+    const { id: userId } = req.user; // Get user ID from token
+    
+    const result = await UserService.permanentlyDeleteUser(userId);
+    return res.status(200).json(result);
+  });
 }
 
 module.exports = UserController;
