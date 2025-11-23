@@ -1,0 +1,243 @@
+{
+  "info": {
+    "name": "Pryve Support API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Support API: Create, read, update, and delete support messages. Clients can create and manage their own messages. Admins can view all messages and update status."
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Create Support Message",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"subject\": \"Need help with account settings\",\n  \"message\": \"I'm having trouble updating my profile picture. Can you please help?\",\n  \"category\": \"TECHNICAL\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/support",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "support"]
+        },
+        "description": "Create a new support message. Required fields: subject, message. Optional: category (TECHNICAL, BILLING, FEATURE_REQUEST, BUG_REPORT, etc.)"
+      },
+      "response": []
+    },
+    {
+      "name": "Get All Support Messages",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/support?page=1&limit=20&status=PENDING&category=TECHNICAL",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "support"],
+          "query": [
+            {
+              "key": "page",
+              "value": "1",
+              "description": "Page number (default: 1)"
+            },
+            {
+              "key": "limit",
+              "value": "20",
+              "description": "Items per page (default: 20)"
+            },
+            {
+              "key": "status",
+              "value": "PENDING",
+              "description": "Filter by status: PENDING, IN_PROGRESS, RESOLVED, CLOSED",
+              "disabled": true
+            },
+            {
+              "key": "category",
+              "value": "TECHNICAL",
+              "description": "Filter by category",
+              "disabled": true
+            }
+          ]
+        },
+        "description": "Get all support messages. Admins see all messages, clients see only their own. Supports pagination and filtering by status and category."
+      },
+      "response": []
+    },
+    {
+      "name": "Get Support Message by ID",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/support/:id",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "support", ":id"],
+          "variable": [
+            {
+              "key": "id",
+              "value": "support-message-id",
+              "description": "The ID of the support message"
+            }
+          ]
+        },
+        "description": "Get a single support message by ID. Clients can only view their own messages, admins can view any message."
+      },
+      "response": []
+    },
+    {
+      "name": "Update Support Message (Client - Edit Own)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"subject\": \"Updated subject\",\n  \"message\": \"Updated message content\",\n  \"category\": \"BILLING\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/support/:id",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "support", ":id"],
+          "variable": [
+            {
+              "key": "id",
+              "value": "support-message-id",
+              "description": "The ID of the support message to update"
+            }
+          ]
+        },
+        "description": "Update a support message. Clients can update their own messages (subject, message, category). Admins can update status."
+      },
+      "response": []
+    },
+    {
+      "name": "Update Support Message (Admin - Change Status)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"IN_PROGRESS\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/support/:id",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "support", ":id"],
+          "variable": [
+            {
+              "key": "id",
+              "value": "support-message-id",
+              "description": "The ID of the support message to update"
+            }
+          ]
+        },
+        "description": "Admin-only: Update support message status. Valid statuses: PENDING, IN_PROGRESS, RESOLVED, CLOSED"
+      },
+      "response": []
+    },
+    {
+      "name": "Delete Support Message",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/support/:id",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "support", ":id"],
+          "variable": [
+            {
+              "key": "id",
+              "value": "support-message-id",
+              "description": "The ID of the support message to delete"
+            }
+          ]
+        },
+        "description": "Delete a support message. Clients can only delete their own messages, admins can delete any message."
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
+

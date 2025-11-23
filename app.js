@@ -39,6 +39,7 @@ const dashboardRoutes = require("./src/api/v1/routes/dashboard");
 const apiKeyRoutes = require("./src/api/v1/routes/apiKey");
 const settingsRoutes = require("./src/api/v1/routes/settings");
 const notificationRoutes = require("./src/api/v1/routes/notification");
+const supportRoutes = require("./src/api/v1/routes/support");
 const ChatController = require("./src/api/v1/controller/ChatController");
 const { isAuthenticated } = require("./src/api/v1/middlewares/auth.middleware");
 // const cronRoutes = require("./src/api/v1/routes/cron");
@@ -232,6 +233,7 @@ app.use("/api/v1/dashboard", dashboardRoutes);
 app.use("/api/v1/api-keys", apiKeyRoutes);
 app.use("/api/v1/settings", settingsRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
+app.use("/api/v1/support", supportRoutes);
 // app.use("/api/v1/cron", cronRoutes);
 
 // Journey routes (alternative path)

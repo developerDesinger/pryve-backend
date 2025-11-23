@@ -58,6 +58,7 @@ model User {
   revenueCatPayments RevenueCatPayment[]
   notificationsReceived Notification[] @relation("NotificationRecipient")
   notificationsSent Notification[]     @relation("NotificationSender")
+  supportMessages  SupportMessage[]
 
   @@map("users")
 }
@@ -517,4 +518,33 @@ model SystemSettings {
   options     Json?    // Available options (for dropdowns, etc.)
   
   @@map("system_settings")
+}
+
+model SupportMessage {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Message content
+  subject     String
+  message     String   @db.Text
+  
+  // User relationship
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Status tracking
+  status      SupportStatus @default(PENDING)
+  
+  // Additional metadata
+  category    String?  // e.g., "TECHNICAL", "BILLING", "FEATURE_REQUEST", "BUG_REPORT"
+  
+  @@map("support_messages")
+}
+
+enum SupportStatus {
+  PENDING
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
 }
