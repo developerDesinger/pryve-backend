@@ -176,6 +176,31 @@ class ChatController {
   });
 
   /**
+   * Remove favorite message
+   * DELETE /api/v1/chats/:chatId/messages/:messageId/remove-favorite
+   */
+  static removeFavoriteMessage = catchAsyncHandler(async (req, res) => {
+    const { id: userId } = req.user;
+    const { chatId, messageId } = req.params;
+    const result = await ChatService.removeFavoriteMessage(
+      chatId,
+      messageId,
+      userId
+    );
+    return res.status(200).json(result);
+  });
+
+  /**
+   * Remove all favorite messages for a user
+   * DELETE /api/v1/chats/favorites/remove-all
+   */
+  static removeAllFavoriteMessages = catchAsyncHandler(async (req, res) => {
+    const { id: userId } = req.user;
+    const result = await ChatService.removeAllFavoriteMessages(userId);
+    return res.status(200).json(result);
+  });
+
+  /**
    * Get all favorite messages for a user
    * GET /api/v1/favorites/messages
    */

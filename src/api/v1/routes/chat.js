@@ -114,6 +114,18 @@ router.post(
   isAuthenticated,
   ChatController.toggleFavorite
 );
+router.delete(
+  "/:chatId/messages/:messageId/remove-favorite",
+  isAuthenticated,
+  ChatController.removeFavoriteMessage
+);
+
+// Remove all favorite messages
+router.delete(
+  "/favorites/remove-all",
+  isAuthenticated,
+  ChatController.removeAllFavoriteMessages
+);
 
 // Test endpoint for file upload debugging
 router.post("/test-upload", isAuthenticated, (req, res, next) => {

@@ -1402,6 +1402,95 @@ class ChatService {
   }
 
   /**
+   * Remove favorite message (delete from favorites)
+   * DELETE /api/v1/chats/:chatId/messages/:messageId/remove-favorite
+   */
+  static async removeFavoriteMessage(chatId, messageId, userId) {
+    // Verify message exists and belongs to user's chat
+    const message = await prisma.message.findFirst({
+      where: { id: messageId, chatId },
+      include: { chat: true },
+    });
+
+    if (!message) {
+      throw new AppError("Message not found.", HttpStatusCodes.NOT_FOUND);
+    }
+
+    // Verify chat belongs to user
+    if (message.chat.userId !== userId) {
+      throw new AppError("Unauthorized access.", HttpStatusCodes.FORBIDDEN);
+    }
+
+    // Check if favorited
+    const existingFavorite = await prisma.userMessageFavorite.findUnique({
+      where: {
+        messageId_userId: {
+          messageId,
+          userId,
+        },
+      },
+    });
+
+    if (!existingFavorite) {
+      throw new AppError(
+        "Message is not in favorites.",
+        HttpStatusCodes.BAD_REQUEST
+      );
+    }
+
+    // Remove from favorites
+    await prisma.userMessageFavorite.delete({
+      where: {
+        messageId_userId: {
+          messageId,
+          userId,
+        },
+      },
+    });
+
+    return {
+      message: "Favorite message removed successfully.",
+      success: true,
+      isFavorite: false,
+    };
+  }
+
+  /**
+   * Remove all favorite messages for a user
+   * DELETE /api/v1/chats/favorites/remove-all
+   */
+  static async removeAllFavoriteMessages(userId) {
+    // Count existing favorites before deletion
+    const favoriteCount = await prisma.userMessageFavorite.count({
+      where: { userId },
+    });
+
+    if (favoriteCount === 0) {
+      return {
+        message: "No favorite messages found to remove.",
+        success: true,
+        deletedCount: 0,
+      };
+    }
+
+    // Delete all favorite messages for the user
+    const deleteResult = await prisma.userMessageFavorite.deleteMany({
+      where: { userId },
+    });
+
+    Logger.info("All favorite messages removed", {
+      userId,
+      deletedCount: deleteResult.count,
+    });
+
+    return {
+      message: `Successfully removed ${deleteResult.count} favorite message(s).`,
+      success: true,
+      deletedCount: deleteResult.count,
+    };
+  }
+
+  /**
    * Get all favorite messages for a user
    * GET /api/v1/favorites/messages
    */
