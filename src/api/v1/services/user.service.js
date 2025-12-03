@@ -348,6 +348,15 @@ class UserService {
   static async socialLogin(data) {
     try {
       console.log("🔐 [SOCIAL LOGIN] Started with data:", JSON.stringify(data, null, 2));
+      console.log("📦 [SOCIAL LOGIN] Request body received:", {
+        email: data?.email || '(empty)',
+        provider: data?.provider,
+        providerId: data?.providerId,
+        userName: data?.userName || '(empty)',
+        firstName: data?.firstName || '(empty)',
+        lastName: data?.lastName || '(empty)',
+        profilePhoto: data?.profilePhoto || '(empty)',
+      });
 
     const {
       email,
@@ -402,67 +411,197 @@ class UserService {
 
     // If user doesn't exist, create a new one
     if (!user) {
-        console.log("➕ [SOCIAL LOGIN] Creating new user:", { email, provider, providerId, userName });
+        // Double-check by providerId before creating (race condition protection)
+        if (providerId) {
+          const existingByProviderId = await prisma.user.findUnique({ where: { providerId } });
+          if (existingByProviderId) {
+            console.log("✅ [SOCIAL LOGIN] User found by providerId (race condition check):", existingByProviderId.id);
+            user = existingByProviderId;
+          }
+        }
         
-        try {
-      user = await prisma.user.create({
-        data: {
-          email,
-          userName,
-          loginType: provider,
-          providerId,
-          role: "CLIENT", // Default role for new users
-          status: "ACTIVE", // Default status for social login
-          profilePhoto,
-          firstName,
-          lastName,
-          queryCount: 20, // Initialize with 20 free queries
-        },
-      });
+        if (!user) {
+          console.log("➕ [SOCIAL LOGIN] Creating new user:", { email: email || '(empty)', provider, providerId, userName });
           
-          console.log("✅ [SOCIAL LOGIN] New user created:", {
-            userId: user.id,
-            email: user.email,
-            provider: user.loginType,
-            status: user.status,
-          });
-        } catch (createError) {
-          // Handle unique constraint errors gracefully
-          if (createError.code === 'P2002') {
-            console.error("❌ [SOCIAL LOGIN] Unique constraint error:", createError.meta);
+          try {
+            // Prepare user data
+            const userData = {
+              loginType: provider,
+              providerId,
+              role: "CLIENT", // Default role for new users
+              status: "ACTIVE", // Default status for social login
+              queryCount: 20, // Initialize with 20 free queries
+            };
             
-            // If email constraint failed, check if user exists
-            if (createError.meta?.target?.includes('email')) {
-              const existingUser = await prisma.user.findUnique({ where: { email } });
-              if (existingUser) {
-                const loginTypeMap = {
-                  EMAIL: "email/password",
-                  GOOGLE: "Google",
-                  APPLE: "Apple",
-                  FACEBOOK: "Facebook",
-                };
+            // Handle email - if empty, generate a unique email from providerId
+            if (email && email.trim() !== '') {
+              userData.email = email;
+            } else {
+              // Generate unique email from providerId to avoid empty email constraint issues
+              userData.email = `${providerId}@social.local`;
+              console.log("📧 [SOCIAL LOGIN] Email is empty, using generated email:", userData.email);
+            }
+            
+            // Handle userName - if empty, set to null (schema allows null) or generate unique
+            if (userName && userName.trim() !== '') {
+              userData.userName = userName;
+            } else {
+              // Set to null instead of empty string to avoid unique constraint issues
+              userData.userName = null;
+              console.log("👤 [SOCIAL LOGIN] UserName is empty, setting to null");
+            }
+            
+            // Handle optional fields - only include if not empty
+            if (profilePhoto && profilePhoto.trim() !== '') {
+              userData.profilePhoto = profilePhoto;
+            }
+            if (firstName && firstName.trim() !== '') {
+              userData.firstName = firstName;
+            }
+            if (lastName && lastName.trim() !== '') {
+              userData.lastName = lastName;
+            }
+            
+            console.log("📝 [SOCIAL LOGIN] User data to create:", { ...userData, email: userData.email, userName: userData.userName || '(null)' });
+            
+            user = await prisma.user.create({
+              data: userData,
+            });
+            
+            console.log("✅ [SOCIAL LOGIN] New user created:", {
+              userId: user.id,
+              email: user.email || '(empty)',
+              provider: user.loginType,
+              status: user.status,
+            });
+          } catch (createError) {
+            console.error("❌ [SOCIAL LOGIN] Create error details:", {
+              code: createError.code,
+              meta: createError.meta,
+              message: createError.message,
+            });
+            console.error("📦 [SOCIAL LOGIN] Request body when error occurred:", {
+              email: email || '(empty)',
+              provider: provider,
+              providerId: providerId,
+              userName: userName || '(empty)',
+              firstName: firstName || '(empty)',
+              lastName: lastName || '(empty)',
+            });
+            
+            // Handle unique constraint errors gracefully
+            if (createError.code === 'P2002') {
+              console.error("❌ [SOCIAL LOGIN] Unique constraint error:", createError.meta);
+              
+              // If email constraint failed
+              if (createError.meta?.target?.includes('email')) {
+                console.log("🔍 [SOCIAL LOGIN] Email constraint failed, searching for user...");
                 
-                const existingLoginMethod = loginTypeMap[existingUser.loginType] || existingUser.loginType;
-                const attemptedLoginMethod = loginTypeMap[provider] || provider;
+                // First try to find by email if email is provided
+                if (email && email.trim() !== '') {
+                  const existingUser = await prisma.user.findUnique({ where: { email } });
+                  if (existingUser) {
+                    console.log("✅ [SOCIAL LOGIN] User found by email:", existingUser.id);
+                    const loginTypeMap = {
+                      EMAIL: "email/password",
+                      GOOGLE: "Google",
+                      APPLE: "Apple",
+                      FACEBOOK: "Facebook",
+                    };
+                    
+                    const existingLoginMethod = loginTypeMap[existingUser.loginType] || existingUser.loginType;
+                    const attemptedLoginMethod = loginTypeMap[provider] || provider;
+                    
+                    // Only show error if providers are different
+                    if (existingUser.loginType !== provider) {
+                      throw new AppError(
+                        `This email is already registered with ${existingLoginMethod}. Please login using ${existingLoginMethod} instead of ${attemptedLoginMethod}.`,
+                        HttpStatusCodes.CONFLICT
+                      );
+                    } else {
+                      // Same provider, use existing user
+                      console.log("✅ [SOCIAL LOGIN] User found with same provider, using existing user:", existingUser.id);
+                      user = existingUser;
+                    }
+                  }
+                }
                 
-                throw new AppError(
-                  `This email is already registered with ${existingLoginMethod}. Please login using ${existingLoginMethod} instead of ${attemptedLoginMethod}.`,
-                  HttpStatusCodes.CONFLICT
-                );
+                // If email is empty or user not found by email, try providerId as fallback
+                if (!user && providerId) {
+                  console.log("🔍 [SOCIAL LOGIN] Trying to find user by providerId:", providerId);
+                  const existingUser = await prisma.user.findUnique({ where: { providerId } });
+                  if (existingUser) {
+                    console.log("✅ [SOCIAL LOGIN] User found by providerId after email constraint error:", existingUser.id);
+                    user = existingUser;
+                  } else {
+                    console.log("❌ [SOCIAL LOGIN] User not found by providerId either");
+                  }
+                }
+              }
+              
+              // If userName constraint failed, find existing user instead of throwing error
+              if (createError.meta?.target?.includes('userName')) {
+                console.log("🔍 [SOCIAL LOGIN] UserName constraint failed, searching for user...");
+                console.log("📦 [SOCIAL LOGIN] Request body in userName error handler:", {
+                  email: email || '(empty)',
+                  provider: provider,
+                  providerId: providerId,
+                  userName: userName || '(empty)',
+                  firstName: firstName || '(empty)',
+                  lastName: lastName || '(empty)',
+                });
+                
+                // Try to find by userName first (only if userName is not empty)
+                if (userName && userName.trim() !== '') {
+                  console.log("🔍 [SOCIAL LOGIN] Searching by userName:", userName);
+                  const existingUser = await prisma.user.findUnique({ where: { userName } });
+                  if (existingUser) {
+                    console.log("✅ [SOCIAL LOGIN] User found by userName:", existingUser.id);
+                    user = existingUser;
+                  } else {
+                    console.log("❌ [SOCIAL LOGIN] User not found by userName");
+                  }
+                } else {
+                  console.log("⚠️ [SOCIAL LOGIN] UserName is empty, skipping userName search");
+                }
+                
+                // If not found by userName, try providerId as fallback
+                if (!user && providerId) {
+                  console.log("🔍 [SOCIAL LOGIN] Trying to find user by providerId:", providerId);
+                  const existingUser = await prisma.user.findUnique({ where: { providerId } });
+                  if (existingUser) {
+                    console.log("✅ [SOCIAL LOGIN] User found by providerId after userName constraint error:", existingUser.id);
+                    user = existingUser;
+                  } else {
+                    console.log("❌ [SOCIAL LOGIN] User not found by providerId either");
+                  }
+                }
+              }
+              
+              // If providerId constraint failed, find existing user instead of throwing error
+              if (createError.meta?.target?.includes('providerId')) {
+                console.log("🔍 [SOCIAL LOGIN] ProviderId constraint failed, searching for user...");
+                const existingUser = await prisma.user.findUnique({ where: { providerId } });
+                if (existingUser) {
+                  console.log("✅ [SOCIAL LOGIN] User found by providerId after constraint error:", existingUser.id);
+                  user = existingUser;
+                } else {
+                  throw new AppError(
+                    "An account with this provider ID already exists. Please try logging in again.",
+                    HttpStatusCodes.CONFLICT
+                  );
+                }
               }
             }
             
-            // If providerId constraint failed
-            if (createError.meta?.target?.includes('providerId')) {
-              throw new AppError(
-                "An account with this provider ID already exists. Please try logging in again.",
-                HttpStatusCodes.CONFLICT
-              );
+            // Re-throw if it's not a constraint error or we couldn't handle it
+            if (!user) {
+              console.error("❌ [SOCIAL LOGIN] Could not resolve error, re-throwing:", createError.message);
+              throw createError;
+            } else {
+              console.log("✅ [SOCIAL LOGIN] Error resolved, user found:", user.id);
             }
           }
-          
-          // Re-throw if it's not a constraint error
-          throw createError;
         }
     } else {
         console.log("👤 [SOCIAL LOGIN] Existing user found:", {
@@ -580,13 +719,17 @@ class UserService {
     } catch (error) {
       console.error("❌ [SOCIAL LOGIN] Error:", {
         provider: data?.provider,
-        email: data?.email,
+        email: data?.email || '(empty)',
         providerId: data?.providerId,
+        userName: data?.userName || '(empty)',
+        firstName: data?.firstName || '(empty)',
+        lastName: data?.lastName || '(empty)',
         errorMessage: error?.message || error.message,
         errorName: error?.name || error.constructor?.name,
         errorCode: error?.statusCode || error.statusCode,
         stack: error?.stack,
       });
+      console.error("📦 [SOCIAL LOGIN] Full request body in error handler:", JSON.stringify(data, null, 2));
       throw error;
     }
   }
@@ -901,7 +1044,8 @@ class UserService {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     console.log(`🔐 [FORGOT PASSWORD] Generated OTP for ${email}: ${otp}`);
 
-    await prisma.user.update({
+    // Update user with new OTP and get the updated user object
+    const updatedUser = await prisma.user.update({
       where: { id: user.id },
       data: {
         otp,
@@ -937,7 +1081,7 @@ class UserService {
       message:
         "OTP has been sent to your email. Please verify to reset your password.",
       success: true,
-      data: user,
+      data: updatedUser,
     };
   }
 

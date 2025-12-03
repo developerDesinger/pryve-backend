@@ -37,7 +37,17 @@ class UserController {
 
   // Social Login
   static socialLoginUser = catchAsyncHandler(async (req, res) => {
-    console.log("🔐 [SOCIAL LOGIN] Request body:", JSON.stringify(req.body, null, 2));
+    console.log("🔐 [SOCIAL LOGIN] Request received");
+    console.log("📦 [SOCIAL LOGIN] Request body:", JSON.stringify(req.body, null, 2));
+    console.log("📋 [SOCIAL LOGIN] Request body details:", {
+      email: req.body?.email || '(empty)',
+      provider: req.body?.provider,
+      providerId: req.body?.providerId,
+      userName: req.body?.userName || '(empty)',
+      firstName: req.body?.firstName || '(empty)',
+      lastName: req.body?.lastName || '(empty)',
+      hasProfilePhoto: !!req.body?.profilePhoto,
+    });
     
     const result = await UserService.socialLogin(req.body);
     
