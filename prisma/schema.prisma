@@ -19,7 +19,7 @@ model User {
   status       Status    @default(ACTIVE)
   otp          String?
   otpCreatedAt DateTime  @default(now())
-  userName     String?   @unique
+  userName     String?
   loginType    LoginType @default(EMAIL)
   providerId   String?   @unique
   firstName    String?

@@ -57,6 +57,13 @@ class UserService {
           errorCode: "USER_ALREADY_EXISTS",
           ipAddress: requestMetadata.ipAddress,
           userAgent: requestMetadata.userAgent,
+          metadata: {
+            requestBody: {
+              email: data.email || null,
+              fullName: data.fullName || null,
+              profilePhoto: data.profilePhoto || null,
+            },
+          },
         });
         
         return {
@@ -126,6 +133,17 @@ class UserService {
         userName: user.userName,
         ipAddress: requestMetadata.ipAddress,
         userAgent: requestMetadata.userAgent,
+        metadata: {
+          requestBody: {
+            email: data.email || null,
+            fullName: data.fullName || null,
+            profilePhoto: data.profilePhoto || null,
+          },
+          userResult: {
+            id: user.id,
+            status: user.status,
+          },
+        },
       });
 
       return {
@@ -152,8 +170,17 @@ class UserService {
         ipAddress: requestMetadata.ipAddress,
         userAgent: requestMetadata.userAgent,
         metadata: {
-          errorName: error.name,
-          stack: error.stack,
+          requestBody: {
+            email: data?.email || null,
+            fullName: data?.fullName || null,
+            profilePhoto: data?.profilePhoto || null,
+          },
+          error: {
+            name: error.name,
+            message: error.message,
+            code: error.statusCode || error.code,
+            stack: error.stack,
+          },
         },
       });
       
@@ -285,6 +312,16 @@ class UserService {
         userName: updatedUser.userName,
         ipAddress: requestMetadata.ipAddress,
         userAgent: requestMetadata.userAgent,
+        metadata: {
+          requestBody: {
+            email: data.email || null,
+            // Don't log OTP for security
+          },
+          userResult: {
+            id: updatedUser.id,
+            status: updatedUser.status,
+          },
+        },
       });
 
       return {
@@ -306,8 +343,16 @@ class UserService {
         ipAddress: requestMetadata.ipAddress,
         userAgent: requestMetadata.userAgent,
         metadata: {
-          errorName: error.name,
-          stack: error.stack,
+          requestBody: {
+            email: data?.email || null,
+            // Don't log OTP for security
+          },
+          error: {
+            name: error.name,
+            message: error.message,
+            code: error.statusCode || error.code,
+            stack: error.stack,
+          },
         },
       });
       
@@ -407,6 +452,13 @@ class UserService {
           errorCode: "MISSING_CREDENTIALS",
           ipAddress: requestMetadata.ipAddress,
           userAgent: requestMetadata.userAgent,
+          metadata: {
+            requestBody: {
+              email: data.email || null,
+              role: data.role || null,
+              // Don't log password for security
+            },
+          },
         });
         
         return {
@@ -442,6 +494,13 @@ class UserService {
           errorCode: "USER_NOT_FOUND",
           ipAddress: requestMetadata.ipAddress,
           userAgent: requestMetadata.userAgent,
+          metadata: {
+            requestBody: {
+              email: data.email || null,
+              role: data.role || null,
+              // Don't log password for security
+            },
+          },
         });
         
         return {
@@ -577,6 +636,18 @@ class UserService {
         userName: user.userName,
         ipAddress: requestMetadata.ipAddress,
         userAgent: requestMetadata.userAgent,
+        metadata: {
+          requestBody: {
+            email: data.email || null,
+            role: data.role || null,
+            // Don't log password for security
+          },
+          userResult: {
+            id: user.id,
+            loginType: user.loginType,
+            status: user.status,
+          },
+        },
       });
       
       return {
@@ -599,8 +670,17 @@ class UserService {
         ipAddress: requestMetadata.ipAddress,
         userAgent: requestMetadata.userAgent,
         metadata: {
-          errorName: error.name,
-          stack: error.stack,
+          requestBody: {
+            email: data?.email || null,
+            role: data?.role || null,
+            // Don't log password for security
+          },
+          error: {
+            name: error.name,
+            message: error.message,
+            code: error.statusCode || error.code,
+            stack: error.stack,
+          },
         },
       });
       
@@ -657,6 +737,21 @@ class UserService {
           providerId: user.providerId,
           isDeleted: user.isDeleted
         } : "User not found by email");
+        
+        // If user found by email with EMAIL loginType, allow adding social provider credentials
+        // This enables users who registered with email/password to also login with social providers
+        // The loginType will remain EMAIL, but providerId will be stored for social login
+        if (user && user.loginType === 'EMAIL' && provider !== 'EMAIL') {
+          console.log("✅ [SOCIAL LOGIN] EMAIL user adding social provider credentials:", {
+            email: user.email,
+            existingLoginType: user.loginType,
+            newProvider: provider,
+            providerId: providerId,
+          });
+          // Continue with existing user - providerId will be added in update logic below
+        }
+        // If user has social loginType and trying different social provider, allow switching
+        // This will be handled in the update logic below
       }
       
       // If user not found by email (or email not provided), check by providerId
@@ -921,12 +1016,25 @@ class UserService {
         }
         
         // Update login type if different (only if we didn't switch users)
+        // Exception: Keep EMAIL loginType when EMAIL user adds social provider credentials
         if (!userSwitched && user.loginType !== provider) {
-          updateData.loginType = provider;
-          console.log("🔄 [SOCIAL LOGIN] Login type update needed (user switching providers):", {
-            old: user.loginType,
-            new: provider,
-          });
+          // If user has EMAIL loginType, keep it (don't change to social provider)
+          // This allows EMAIL users to also login with social providers
+          if (user.loginType === 'EMAIL') {
+            console.log("ℹ️ [SOCIAL LOGIN] Keeping EMAIL loginType, adding social provider credentials:", {
+              loginType: user.loginType,
+              provider: provider,
+              providerId: providerId,
+            });
+            // Don't update loginType - keep it as EMAIL
+          } else {
+            // User switching between social providers - update loginType
+            updateData.loginType = provider;
+            console.log("🔄 [SOCIAL LOGIN] Login type update needed (user switching providers):", {
+              old: user.loginType,
+              new: provider,
+            });
+          }
         }
         
         // Also update profile info if provided
@@ -1007,6 +1115,23 @@ class UserService {
         providerId: user.providerId,
         ipAddress: requestMetadata.ipAddress,
         userAgent: requestMetadata.userAgent,
+        metadata: {
+          requestBody: {
+            provider: data.provider,
+            providerId: data.providerId,
+            email: data.email || null,
+            userName: data.userName || null,
+            firstName: data.firstName || null,
+            lastName: data.lastName || null,
+            profilePhoto: data.profilePhoto || null,
+          },
+          userResult: {
+            id: user.id,
+            loginType: user.loginType,
+            status: user.status,
+            providerId: user.providerId,
+          },
+        },
       });
       
     return {
@@ -1030,8 +1155,21 @@ class UserService {
         ipAddress: requestMetadata.ipAddress,
         userAgent: requestMetadata.userAgent,
         metadata: {
-          errorName: error.name,
-          stack: error.stack,
+          requestBody: {
+            provider: data?.provider || null,
+            providerId: data?.providerId || null,
+            email: data?.email || null,
+            userName: data?.userName || null,
+            firstName: data?.firstName || null,
+            lastName: data?.lastName || null,
+            profilePhoto: data?.profilePhoto || null,
+          },
+          error: {
+            name: error.name,
+            message: error?.message || error.message,
+            code: error?.statusCode || error.code,
+            stack: error.stack,
+          },
         },
       });
       
