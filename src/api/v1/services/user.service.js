@@ -471,6 +471,52 @@ class UserService {
         };
       }
 
+      // Check if user registered via social login (no password set)
+      if (user.loginType && user.loginType !== "EMAIL" && (!user.password || user.password === null)) {
+        const providerName = user.loginType === "GOOGLE" ? "Google" : 
+                            user.loginType === "APPLE" ? "Apple" : 
+                            user.loginType === "FACEBOOK" ? "Facebook" : user.loginType;
+        
+        // Log failed login attempt
+        await AuthLogService.logAuthEvent({
+          eventType: "LOGIN",
+          status: "FAILED",
+          loginType: user.loginType,
+          userId: user.id,
+          email: user.email,
+          errorMessage: `This account is registered via ${providerName} social login. Please use social login instead.`,
+          errorCode: "SOCIAL_LOGIN_REQUIRED",
+          ipAddress: requestMetadata.ipAddress,
+          userAgent: requestMetadata.userAgent,
+        });
+        
+        return {
+          message: `This account is registered via ${providerName} social login. Please use social login instead.`,
+          success: false,
+        };
+      }
+
+      // Check if password is missing (shouldn't happen for EMAIL login type, but safety check)
+      if (!user.password) {
+        // Log failed login attempt
+        await AuthLogService.logAuthEvent({
+          eventType: "LOGIN",
+          status: "FAILED",
+          loginType: user.loginType || "EMAIL",
+          userId: user.id,
+          email: user.email,
+          errorMessage: "Password not set for this account. Please use social login or reset your password.",
+          errorCode: "PASSWORD_NOT_SET",
+          ipAddress: requestMetadata.ipAddress,
+          userAgent: requestMetadata.userAgent,
+        });
+        
+        return {
+          message: "Password not set for this account. Please use social login or reset your password.",
+          success: false,
+        };
+      }
+
       const isMatch = await bcrypt.compare(password, user.password);
       if (!isMatch) {
         // Log failed login attempt
@@ -846,18 +892,40 @@ class UserService {
         // Update login type and providerId if different or missing
         // This allows users to switch providers (e.g., from Google to Apple)
         const updateData = {};
-        if (user.loginType !== provider) {
+        let userSwitched = false;
+        
+        if (!user.providerId || user.providerId !== providerId) {
+          // Check if the providerId already exists for a different user
+          const existingUserWithProviderId = await prisma.user.findUnique({ 
+            where: { providerId } 
+          });
+          
+          if (existingUserWithProviderId && existingUserWithProviderId.id !== user.id) {
+            // ProviderId already belongs to another user - use that user instead
+            console.log("🔄 [SOCIAL LOGIN] ProviderId belongs to different user, switching to that user:", {
+              currentUserId: user.id,
+              correctUserId: existingUserWithProviderId.id,
+              providerId: providerId
+            });
+            user = existingUserWithProviderId;
+            userSwitched = true;
+            // Don't update providerId since it's already correct for this user
+          } else {
+            // Safe to update providerId
+            updateData.providerId = providerId;
+            console.log("🔄 [SOCIAL LOGIN] ProviderId update needed:", {
+              old: user.providerId,
+              new: providerId,
+            });
+          }
+        }
+        
+        // Update login type if different (only if we didn't switch users)
+        if (!userSwitched && user.loginType !== provider) {
           updateData.loginType = provider;
           console.log("🔄 [SOCIAL LOGIN] Login type update needed (user switching providers):", {
             old: user.loginType,
             new: provider,
-          });
-        }
-        if (!user.providerId || user.providerId !== providerId) {
-          updateData.providerId = providerId;
-          console.log("🔄 [SOCIAL LOGIN] ProviderId update needed:", {
-            old: user.providerId,
-            new: providerId,
           });
         }
         
