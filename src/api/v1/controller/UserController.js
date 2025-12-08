@@ -1,9 +1,11 @@
 const UserService = require("../services/user.service");
 const catchAsyncHandler = require("../utils/catchAsyncHandler");
+const { extractRequestMetadata } = require("../utils/requestMetadata");
 
 class UserController {
   static createUser = catchAsyncHandler(async (req, res) => {
-    const result = await UserService.createUser(req.body);
+    const requestMetadata = extractRequestMetadata(req);
+    const result = await UserService.createUser(req.body, requestMetadata);
     return res.status(201).json(result);
   });
 
@@ -21,7 +23,8 @@ class UserController {
   });
 
   static verifyOtp = catchAsyncHandler(async (req, res) => {
-    const result = await UserService.verifyOtp(req.body);
+    const requestMetadata = extractRequestMetadata(req);
+    const result = await UserService.verifyOtp(req.body, requestMetadata);
     return res.status(200).json(result);
   });
 
@@ -31,7 +34,8 @@ class UserController {
   });
 
   static loginUser = catchAsyncHandler(async (req, res) => {
-    const result = await UserService.loginUser(req.body);
+    const requestMetadata = extractRequestMetadata(req);
+    const result = await UserService.loginUser(req.body, requestMetadata);
     return res.status(200).json(result);
   });
 
@@ -49,7 +53,8 @@ class UserController {
       hasProfilePhoto: !!req.body?.profilePhoto,
     });
     
-    const result = await UserService.socialLogin(req.body);
+    const requestMetadata = extractRequestMetadata(req);
+    const result = await UserService.socialLogin(req.body, requestMetadata);
     
     console.log("✅ [SOCIAL LOGIN] Success - User ID:", result?.user?.id, "Email:", result?.user?.email);
     

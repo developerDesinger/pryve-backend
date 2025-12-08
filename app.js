@@ -40,11 +40,15 @@ const apiKeyRoutes = require("./src/api/v1/routes/apiKey");
 const settingsRoutes = require("./src/api/v1/routes/settings");
 const notificationRoutes = require("./src/api/v1/routes/notification");
 const supportRoutes = require("./src/api/v1/routes/support");
+const authLogRoutes = require("./src/api/v1/routes/authLog");
 const ChatController = require("./src/api/v1/controller/ChatController");
 const { isAuthenticated } = require("./src/api/v1/middlewares/auth.middleware");
 // const cronRoutes = require("./src/api/v1/routes/cron");
 const app = express();
 //const admin = require("firebase-admin");
+
+// Trust proxy for correct IP address extraction (important for logging)
+app.set('trust proxy', true);
 
 // Middleware
 app.use(express.json({ limit: "100mb" }));
@@ -234,6 +238,7 @@ app.use("/api/v1/api-keys", apiKeyRoutes);
 app.use("/api/v1/settings", settingsRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/support", supportRoutes);
+app.use("/api/v1/auth-logs", authLogRoutes);
 // app.use("/api/v1/cron", cronRoutes);
 
 // Journey routes (alternative path)

@@ -24,78 +24,77 @@ model User {
   providerId   String?   @unique
   firstName    String?
   lastName     String?
-  
-  // Additional profile fields
-  gender       Gender?
-  dateOfBirth  DateTime?
-  country      String?
-  region       String?
 
-  
+  // Additional profile fields
+  gender      Gender?
+  dateOfBirth DateTime?
+  country     String?
+  region      String?
+
   // Test field to demonstrate auto-sync
-  phoneNumber  String?
-  
+  phoneNumber String?
+
   // New field for testing update functionality
-  bio          String?
-  
+  bio String?
+
   // FCM token for push notifications
-  fcmToken     String?
-  
+  fcmToken String?
+
   // Account deletion tracking
-  isDeleted    Boolean   @default(false)
-  deletedAt    DateTime?
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
 
   // Free tier query limit
-  queryCount   Int       @default(20)
+  queryCount Int @default(20)
 
   // Chat relationships
-  chats            Chat[]
-  sentMessages     Message[]
-  messageReactions MessageReaction[]
-  readReceipts     MessageReadReceipt[]
-  mediaLibrary     MediaLibrary[]
-  favoriteMessages UserMessageFavorite[]
-  revenueCatPayments RevenueCatPayment[]
-  notificationsReceived Notification[] @relation("NotificationRecipient")
-  notificationsSent Notification[]     @relation("NotificationSender")
-  supportMessages  SupportMessage[]
+  chats                 Chat[]
+  sentMessages          Message[]
+  messageReactions      MessageReaction[]
+  readReceipts          MessageReadReceipt[]
+  mediaLibrary          MediaLibrary[]
+  favoriteMessages      UserMessageFavorite[]
+  revenueCatPayments    RevenueCatPayment[]
+  notificationsReceived Notification[]        @relation("NotificationRecipient")
+  notificationsSent     Notification[]        @relation("NotificationSender")
+  supportMessages       SupportMessage[]
 
   @@map("users")
 }
 
 model Chat {
-  id          String   @id @default(cuid())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Chat basic info
   name        String?
   description String?
   type        ChatType @default(PERSONAL_AI)
   isActive    Boolean  @default(true)
-  
+
   // Account deletion tracking
-  isDeleted    Boolean   @default(false)
-  deletedAt    DateTime?
-  
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
   // Owner of the chat (one-to-one with user)
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   // Messages in this chat
-  messages    Message[]
-  mediaFiles  MediaLibrary[]
-  
+  messages   Message[]
+  mediaFiles MediaLibrary[]
+
   // Chat metadata
   lastMessageAt DateTime?
   lastMessage   String?
-  messageCount   Int      @default(0)
-  
+  messageCount  Int       @default(0)
+
   // AI Chat specific fields
-  aiModel       String?  // GPT-4, GPT-3.5, etc.
-  systemPrompt  String?  // Custom system prompt for this chat
-  temperature   Float?   // AI response temperature
-  
+  aiModel      String? // GPT-4, GPT-3.5, etc.
+  systemPrompt String? // Custom system prompt for this chat
+  temperature  Float? // AI response temperature
+
   @@map("chats")
 }
 
@@ -103,78 +102,78 @@ model Message {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
+
   // Message content
-  content   String?
-  type      MessageType @default(TEXT)
-  status    MessageStatus @default(SENT)
-  
+  content String?
+  type    MessageType   @default(TEXT)
+  status  MessageStatus @default(SENT)
+
   // Relationships
-  chatId    String
-  senderId  String
-  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  sender    User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
-  
+  chatId   String
+  senderId String
+  chat     Chat   @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender   User   @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
   // Media files (stored in S3)
-  imageUrl     String? // URL for image files
-  audioUrl     String? // URL for audio files
-  videoUrl     String? // URL for video files
-  fileUrl      String? // URL for other file types
-  
+  imageUrl String? // URL for image files
+  audioUrl String? // URL for audio files
+  videoUrl String? // URL for video files
+  fileUrl  String? // URL for other file types
+
   // Media metadata
-  mediaType    String? // MIME type
-  mediaSize    Int?    // File size in bytes
-  mediaDuration Int?   // For audio/video files in seconds
-  mediaName    String? // Original filename
-  
+  mediaType     String? // MIME type
+  mediaSize     Int? // File size in bytes
+  mediaDuration Int? // For audio/video files in seconds
+  mediaName     String? // Original filename
+
   // Message metadata
-  replyToId    String?
-  replyTo      Message? @relation("MessageReplies", fields: [replyToId], references: [id])
-  replies      Message[] @relation("MessageReplies")
-  
+  replyToId String?
+  replyTo   Message?  @relation("MessageReplies", fields: [replyToId], references: [id])
+  replies   Message[] @relation("MessageReplies")
+
   // Message reactions
-  reactions    MessageReaction[]
-  
+  reactions MessageReaction[]
+
   // Read receipts
   readReceipts MessageReadReceipt[]
-  
+
   // Message favorites
-  favoritedBy  UserMessageFavorite[]
-  
+  favoritedBy UserMessageFavorite[]
+
   // Message editing
-  editedAt     DateTime?
+  editedAt      DateTime?
   editedContent String?
-  
+
   // AI specific fields
-  isFromAI     Boolean  @default(false)
-  aiModel      String?  // Which AI model generated this response
-  tokensUsed   Int?     // Number of tokens used for this message
-  processingTime Int?   // Time taken to generate response in ms
-  
+  isFromAI       Boolean @default(false)
+  aiModel        String? // Which AI model generated this response
+  tokensUsed     Int? // Number of tokens used for this message
+  processingTime Int? // Time taken to generate response in ms
+
   // Emotion detection fields
-  emotion      String?  // Detected emotion (joy, sadness, anger, fear, surprise, disgust, neutral)
+  emotion           String? // Detected emotion (joy, sadness, anger, fear, surprise, disgust, neutral)
   emotionConfidence Float? // Confidence score for emotion detection (0-1)
-  
+
   // Account deletion tracking
-  isDeleted    Boolean   @default(false)
-  deletedAt    DateTime?
-  
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
   @@map("messages")
 }
 
 model MessageReaction {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
-  
+
   // Relationships
   messageId String
   userId    String
   message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
   user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   // Reaction details
-  emoji     String
-  
+  emoji String
+
   @@unique([messageId, userId])
   @@map("message_reactions")
 }
@@ -182,16 +181,16 @@ model MessageReaction {
 model MessageReadReceipt {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
-  
+
   // Relationships
   messageId String
   userId    String
   message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
   user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   // Read status
-  readAt    DateTime @default(now())
-  
+  readAt DateTime @default(now())
+
   @@unique([messageId, userId])
   @@map("message_read_receipts")
 }
@@ -200,13 +199,13 @@ model UserMessageFavorite {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
+
   // Relationships
   messageId String
   userId    String
   message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
   user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   @@unique([messageId, userId])
   @@map("user_message_favorites")
 }
@@ -258,160 +257,160 @@ enum ChatType {
 }
 
 model MediaLibrary {
-  id          String   @id @default(cuid())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // File information
-  fileName    String
+  fileName     String
   originalName String
-  filePath    String
-  fileUrl     String
-  fileType    String   // 'images', 'audio', 'videos', 'documents'
-  mimeType    String
-  fileSize    Int
-  
+  filePath     String
+  fileUrl      String
+  fileType     String // 'images', 'audio', 'videos', 'documents'
+  mimeType     String
+  fileSize     Int
+
   // Relationships
-  userId      String
-  chatId      String?
-  messageId   String?
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  chat        Chat?    @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  
+  userId    String
+  chatId    String?
+  messageId String?
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chat      Chat?   @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
   // Metadata
-  uploadedAt  DateTime @default(now())
-  
+  uploadedAt DateTime @default(now())
+
   // Account deletion tracking
-  isDeleted    Boolean   @default(false)
-  deletedAt    DateTime?
-  
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
   @@map("media_library")
 }
 
 model ToneProfile {
-  id                    String   @id @default(cuid())
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-  
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Basic Profile Info
-  name                  String
-  description           String
-  icon                  String
-  isActive              Boolean  @default(false)
-  
+  name        String
+  description String
+  icon        String
+  isActive    Boolean @default(false)
+
   // Core Identity (Tone-specific)
-  coreIdentity          String
-  
+  coreIdentity String
+
   // Safety Guidelines (Tone-specific)
-  safetyGuidelines      String[]
-  
+  safetyGuidelines String[]
+
   // Tone Instructions (Tone-specific)
   comfortingInstructions String
-  
+
   // Tone Settings (Tone-specific)
-  maxWords              Int      @default(150)
-  responseStyle         String   @default("Conversational")
-  bannedWords           String[]
-  
+  maxWords      Int      @default(150)
+  responseStyle String   @default("Conversational")
+  bannedWords   String[]
+
   // Mood-to-Tone Routing (Tone-specific)
-  moodToToneRouting     Json
-  
+  moodToToneRouting Json
+
   @@map("tone_profiles")
 }
 
 model EmotionalRule {
-  id            String   @id @default(cuid())
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Basic Rule Info
-  trigger       String   // e.g., "anxiety", "stress", "sadness"
-  responseType  String   // e.g., "Soft comfort tone", "Supportive response"
-  tone          String   // e.g., "Calm & reassuring", "Empathetic"
-  description   String   // Detailed description of the rule
-  
+  trigger      String // e.g., "anxiety", "stress", "sadness"
+  responseType String // e.g., "Soft comfort tone", "Supportive response"
+  tone         String // e.g., "Calm & reassuring", "Empathetic"
+  description  String // Detailed description of the rule
+
   // Rule Settings
-  isActive      Boolean  @default(true)
-  priority      Int      @default(1) // Higher number = higher priority
-  
+  isActive Boolean @default(true)
+  priority Int     @default(1) // Higher number = higher priority
+
   @@map("emotional_rules")
 }
 
 model AIConfig {
-  id                    String   @id @default(cuid())
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-  
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // AI Personality Configuration
-  systemPrompt          String?  // Core AI personality and behavior
-  systemPromptActive    Boolean  @default(false)
-  contextNeededMessage  String?  // Fallback message when more context is needed
-  contextNeededActive   Boolean  @default(false)
-  technicalErrorMessage String?  // Fallback message for technical errors
-  technicalErrorActive  Boolean  @default(false)
-  
+  systemPrompt          String? // Core AI personality and behavior
+  systemPromptActive    Boolean @default(false)
+  contextNeededMessage  String? // Fallback message when more context is needed
+  contextNeededActive   Boolean @default(false)
+  technicalErrorMessage String? // Fallback message for technical errors
+  technicalErrorActive  Boolean @default(false)
+
   @@map("ai_configs")
 }
 
 model RevenueCatPayment {
-  id                    String   @id @default(cuid())
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-  
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // User relationship
-  userId                String
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   // RevenueCat event details
-  eventType             String   // INITIAL_PURCHASE, RENEWAL, CANCELLATION, etc.
-  appUserId             String   // RevenueCat app_user_id (maps to our user)
-  
+  eventType String // INITIAL_PURCHASE, RENEWAL, CANCELLATION, etc.
+  appUserId String // RevenueCat app_user_id (maps to our user)
+
   // Product and subscription details
-  productId             String   // Product identifier from RevenueCat
-  transactionId         String?  // Unique transaction identifier
-  originalTransactionId String?  // Original transaction ID
-  store                 String?  // APP_STORE, PLAY_STORE, STRIPE, etc.
-  
+  productId             String // Product identifier from RevenueCat
+  transactionId         String? // Unique transaction identifier
+  originalTransactionId String? // Original transaction ID
+  store                 String? // APP_STORE, PLAY_STORE, STRIPE, etc.
+
   // Purchase dates
-  purchaseDate          DateTime?
-  expirationDate        DateTime?
-  periodType            String?  // NORMAL, TRIAL, INTRO
-  
+  purchaseDate   DateTime?
+  expirationDate DateTime?
+  periodType     String? // NORMAL, TRIAL, INTRO
+
   // Subscription status
-  entitlementStatus     String?  // ACTIVE, EXPIRED, etc.
-  isActive              Boolean  @default(false)
-  
+  entitlementStatus String? // ACTIVE, EXPIRED, etc.
+  isActive          Boolean @default(false)
+
   // Revenue and pricing
-  price                 Float?
-  currency              String?
+  price                    Float?
+  currency                 String?
   priceInPurchasedCurrency Float?
-  
+
   // Raw webhook data (stored as JSON for flexibility)
-  rawWebhookData        Json?    // Store complete webhook payload for reference
-  
+  rawWebhookData Json? // Store complete webhook payload for reference
+
   // Additional metadata
-  environment           String?  // PRODUCTION, SANDBOX
-  appId                 String?  // RevenueCat app ID
-  
+  environment String? // PRODUCTION, SANDBOX
+  appId       String? // RevenueCat app ID
+
   @@map("revenuecat_payments")
 }
 
 model Notification {
-  id              String                        @id @default(cuid())
-  createdAt       DateTime                      @default(now())
-  updatedAt       DateTime                      @updatedAt
-  title           String
-  message         String                        @db.Text
-  category        NotificationCategory          @default(BROADCAST)
-  eventType       NotificationEvent             @default(MANUAL)
-  deliveryStatus  NotificationDeliveryStatus    @default(PENDING)
-  metadata        Json?
-  readAt          DateTime?
-  deliveredAt     DateTime?
-  recipientId     String?
-  recipient       User?                         @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
-  sentById        String?
-  sentBy          User?                         @relation("NotificationSender", fields: [sentById], references: [id], onDelete: SetNull)
+  id             String                     @id @default(cuid())
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+  title          String
+  message        String                     @db.Text
+  category       NotificationCategory       @default(BROADCAST)
+  eventType      NotificationEvent          @default(MANUAL)
+  deliveryStatus NotificationDeliveryStatus @default(PENDING)
+  metadata       Json?
+  readAt         DateTime?
+  deliveredAt    DateTime?
+  recipientId    String?
+  recipient      User?                      @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  sentById       String?
+  sentBy         User?                      @relation("NotificationSender", fields: [sentById], references: [id], onDelete: SetNull)
 
   @@map("notifications")
 }
@@ -438,107 +437,107 @@ enum NotificationDeliveryStatus {
 }
 
 model ChatSettings {
-  id                    String   @id @default(cuid())
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  dailyReset            Boolean  @default(false)
-  freeTierMessageLimit  Int      @default(10)
-  gracePeriodMessages   Int      @default(0)
+  dailyReset           Boolean @default(false)
+  freeTierMessageLimit Int     @default(10)
+  gracePeriodMessages  Int     @default(0)
 
-  upgradePromptText     String?  @db.Text
-  showPromptOnLimit     Boolean  @default(true)
-  showPromptAfterGrace  Boolean  @default(false)
-  showPromptOnReturn    Boolean  @default(false)
+  upgradePromptText    String? @db.Text
+  showPromptOnLimit    Boolean @default(true)
+  showPromptAfterGrace Boolean @default(false)
+  showPromptOnReturn   Boolean @default(false)
 
-  newUserMessage        String?  @db.Text
-  returningUserMessage  String?  @db.Text
+  newUserMessage       String? @db.Text
+  returningUserMessage String? @db.Text
 
   @@map("chat_settings")
 }
 
 model ApiKey {
-  id          String   @id @default(cuid())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // API Key Information
-  name        String   // Display name (e.g., "OpenAI API Key", "Stripe Secret Key")
-  apiType     String   // Type of API (OPENAI, STRIPE, SENDGRID, etc.)
-  keyValue    String   // Encrypted API key value
-  description String?  // Optional description
-  
+  name        String // Display name (e.g., "OpenAI API Key", "Stripe Secret Key")
+  apiType     String // Type of API (OPENAI, STRIPE, SENDGRID, etc.)
+  keyValue    String // Encrypted API key value
+  description String? // Optional description
+
   // Metadata
-  isActive    Boolean  @default(true)
-  lastUsedAt  DateTime? // Track when key was last used
-  
+  isActive   Boolean   @default(true)
+  lastUsedAt DateTime? // Track when key was last used
+
   // Environment (optional - for distinguishing dev/prod keys)
-  environment String?  // PRODUCTION, DEVELOPMENT, STAGING
-  
+  environment String? // PRODUCTION, DEVELOPMENT, STAGING
+
   @@unique([apiType, environment])
   @@map("api_keys")
 }
 
 model FeatureToggle {
-  id          String   @id @default(cuid())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Feature Information
-  name        String   @unique // Feature name (e.g., "ADVANCED_ANALYTICS", "AI_VOICE_CHAT")
-  displayName String   // Display name (e.g., "Advanced Analytics", "AI Voice Chat")
-  description String?  // Feature description
-  category    String?  // Feature category (e.g., "ANALYTICS", "COMMUNICATION", "SUPPORT")
-  
+  name        String  @unique // Feature name (e.g., "ADVANCED_ANALYTICS", "AI_VOICE_CHAT")
+  displayName String // Display name (e.g., "Advanced Analytics", "AI Voice Chat")
+  description String? // Feature description
+  category    String? // Feature category (e.g., "ANALYTICS", "COMMUNICATION", "SUPPORT")
+
   // Feature Status
-  isEnabled   Boolean  @default(false)
-  status      String   @default("ACTIVE") // ACTIVE, COMING_SOON, DEPRECATED
-  
+  isEnabled Boolean @default(false)
+  status    String  @default("ACTIVE") // ACTIVE, COMING_SOON, DEPRECATED
+
   // Metadata
-  icon        String?  // Icon identifier or URL
-  order       Int      @default(0) // Display order
-  
+  icon  String? // Icon identifier or URL
+  order Int     @default(0) // Display order
+
   @@map("feature_toggles")
 }
 
 model SystemSettings {
-  id          String   @id @default(cuid())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Settings Key-Value pairs
-  key         String   @unique // Setting key (e.g., "SYSTEM_LANGUAGE", "THEME", "TIMEZONE")
-  value       String   // Setting value (e.g., "English", "dark", "UTC")
-  displayName String   // Display name for the setting
-  description String?  // Setting description
-  category    String?  // Setting category (e.g., "LOCALIZATION", "APPEARANCE", "GENERAL")
-  
+  key         String  @unique // Setting key (e.g., "SYSTEM_LANGUAGE", "THEME", "TIMEZONE")
+  value       String // Setting value (e.g., "English", "dark", "UTC")
+  displayName String // Display name for the setting
+  description String? // Setting description
+  category    String? // Setting category (e.g., "LOCALIZATION", "APPEARANCE", "GENERAL")
+
   // Metadata
-  dataType    String   @default("STRING") // STRING, NUMBER, BOOLEAN, JSON
-  options     Json?    // Available options (for dropdowns, etc.)
-  
+  dataType String @default("STRING") // STRING, NUMBER, BOOLEAN, JSON
+  options  Json? // Available options (for dropdowns, etc.)
+
   @@map("system_settings")
 }
 
 model SupportMessage {
-  id          String   @id @default(cuid())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Message content
-  subject     String
-  message     String   @db.Text
-  
+  subject String
+  message String @db.Text
+
   // User relationship
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   // Status tracking
-  status      SupportStatus @default(PENDING)
-  
+  status SupportStatus @default(PENDING)
+
   // Additional metadata
-  category    String?  // e.g., "TECHNICAL", "BILLING", "FEATURE_REQUEST", "BUG_REPORT"
-  
+  category String? // e.g., "TECHNICAL", "BILLING", "FEATURE_REQUEST", "BUG_REPORT"
+
   @@map("support_messages")
 }
 
@@ -547,4 +546,53 @@ enum SupportStatus {
   IN_PROGRESS
   RESOLVED
   CLOSED
+}
+
+model AuthLog {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  // Authentication event details
+  eventType AuthEventType // REGISTER, LOGIN, SOCIAL_LOGIN, VERIFY_OTP
+  status    AuthLogStatus // SUCCESS, FAILED
+  loginType LoginType? // EMAIL, GOOGLE, APPLE, FACEBOOK
+
+  // User information (nullable for failed attempts)
+  userId   String?
+  email    String?
+  userName String?
+
+  // Provider information (for social login)
+  provider   String? // GOOGLE, APPLE, FACEBOOK
+  providerId String?
+
+  // Request metadata
+  ipAddress String?
+  userAgent String?
+
+  // Error information (for failed attempts)
+  errorMessage String?
+  errorCode    String?
+
+  // Additional metadata
+  metadata Json? // Store any additional context
+
+  @@index([userId])
+  @@index([email])
+  @@index([eventType])
+  @@index([status])
+  @@index([createdAt])
+  @@map("auth_logs")
+}
+
+enum AuthEventType {
+  REGISTER
+  LOGIN
+  SOCIAL_LOGIN
+  VERIFY_OTP
+}
+
+enum AuthLogStatus {
+  SUCCESS
+  FAILED
 }
