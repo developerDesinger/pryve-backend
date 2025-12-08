@@ -1,6 +1,7 @@
 const prisma = require("../../../lib/prisma");
 const AppError = require("../utils/AppError");
 const HttpStatusCodes = require("../enums/httpStatusCode");
+const SupabaseVectorService = require("./supabaseVector.service");
 
 class AIConfigService {
   static async createOrUpdateAIConfig(data) {
@@ -43,6 +44,52 @@ class AIConfigService {
           technicalErrorActive,
         },
       });
+    }
+
+    // Store prompt chunks in Supabase Vector DB if prompt is active and has content
+    if (systemPromptActive && systemPrompt && systemPrompt.trim().length > 0) {
+      try {
+        // Check if prompt is large enough to chunk (>500 words)
+        const wordCount = systemPrompt.trim().split(/\s+/).length;
+        
+        if (wordCount > 500) {
+          console.log(`📦 Processing prompt for vector storage (${wordCount} words)...`);
+          
+          // Delete old chunks for this source if updating
+          if (existingConfig) {
+            await SupabaseVectorService.deleteChunksBySource(existingConfig.id);
+          }
+
+          // Store chunks in Supabase Vector DB
+          const sourceId = aiConfig.id;
+          await SupabaseVectorService.storePromptChunks(
+            systemPrompt,
+            {
+              source: 'ai_config',
+              version: '1.0',
+              prompt_active: systemPromptActive,
+              word_count: wordCount,
+            },
+            sourceId
+          );
+
+          console.log(`✅ Prompt chunks stored in Supabase Vector DB`);
+        } else {
+          console.log(`ℹ️ Prompt too small (${wordCount} words), skipping vector storage`);
+        }
+      } catch (error) {
+        console.error('Error storing prompt chunks in Supabase:', error);
+        // Don't fail the request if vector storage fails
+        // The prompt is still saved in PostgreSQL
+      }
+    } else if (existingConfig && systemPromptActive === false) {
+      // If prompt is being deactivated, archive chunks
+      try {
+        await SupabaseVectorService.deleteChunksBySource(existingConfig.id);
+        console.log(`🗄️ Archived chunks for deactivated prompt`);
+      } catch (error) {
+        console.error('Error archiving chunks:', error);
+      }
     }
 
     return {

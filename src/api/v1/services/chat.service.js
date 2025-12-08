@@ -589,39 +589,82 @@ class ChatService {
     // Get system prompt from AI Config table (database) - priority over chat.systemPrompt
     let systemPromptToUse = null;
     const aiConfig = await prisma.aIConfig.findFirst({
-      select: { systemPrompt: true, systemPromptActive: true },
+      select: { systemPrompt: true, systemPromptActive: true, id: true },
     });
 
-    // Use AI config prompt if it exists (from database)
-    if (aiConfig?.systemPrompt) {
-      systemPromptToUse = aiConfig.systemPrompt;
-    } else if (chat.systemPrompt) {
-      // Fall back to chat-specific prompt if no AI config exists
-      systemPromptToUse = chat.systemPrompt;
+    // Try to get relevant prompt chunks from Supabase Vector DB
+    let usingVectorDB = false;
+    if (aiConfig?.systemPromptActive && aiConfig?.systemPrompt && content) {
+      try {
+        const SupabaseVectorService = require("./supabaseVector.service");
+        const hasChunks = await SupabaseVectorService.hasChunks();
+        
+        if (hasChunks) {
+          // Get relevant context from Supabase Vector DB
+          const relevantContext = await SupabaseVectorService.getRelevantPromptContext(
+            content,
+            3,    // topK: Get top 3 most relevant chunks
+            0.5   // minSimilarity: Minimum 50% similarity
+          );
+
+          if (relevantContext) {
+            systemPromptToUse = `
+Based on the following relevant context from the knowledge base:
+
+${relevantContext}
+
+Use this context to provide accurate and helpful responses to the user's questions.
+            `.trim();
+            usingVectorDB = true;
+            
+            console.log("\n" + "=".repeat(80));
+            console.log("✅ USING SUPABASE VECTOR DB - RELEVANT CHUNKS RETRIEVED");
+            console.log("=".repeat(80));
+            console.log(`Context length: ${relevantContext.length} characters`);
+            console.log("=".repeat(80) + "\n");
+          }
+        }
+      } catch (error) {
+        console.error('Error retrieving from Supabase Vector DB:', error);
+        // Fall through to use full prompt
+      }
     }
 
-    // Add system prompt from database
+    // Fallback: Use full prompt if vector DB didn't work or isn't available
+    if (!usingVectorDB) {
+      if (aiConfig?.systemPrompt) {
+        systemPromptToUse = aiConfig.systemPrompt;
+      } else if (chat.systemPrompt) {
+        // Fall back to chat-specific prompt if no AI config exists
+        systemPromptToUse = chat.systemPrompt;
+      }
+
+      // Add system prompt from database
+      if (systemPromptToUse) {
+        console.log("\n" + "=".repeat(80));
+        console.log("📝 SYSTEM PROMPT BEING USED (FULL PROMPT):");
+        console.log("=".repeat(80));
+        console.log(systemPromptToUse.substring(0, 500) + (systemPromptToUse.length > 500 ? "..." : ""));
+        console.log("=".repeat(80));
+        console.log(`Source: ${aiConfig?.systemPrompt ? "AI Config Table (Database)" : "Chat-specific"}`);
+        console.log(`Full prompt length: ${systemPromptToUse.length} characters`);
+        console.log("=".repeat(80) + "\n");
+      } else {
+        console.log("\n" + "=".repeat(80));
+        console.log("⚠️  NO SYSTEM PROMPT SET");
+        console.log("=".repeat(80));
+        console.log("AI Config Prompt:", aiConfig?.systemPrompt || "None");
+        console.log("Chat System Prompt:", chat.systemPrompt || "None");
+        console.log("=".repeat(80) + "\n");
+      }
+    }
+
+    // Add system prompt to messages
     if (systemPromptToUse) {
       messages.unshift({
         role: "system",
         content: systemPromptToUse,
       });
-      
-      // Log the prompt being used clearly
-      console.log("\n" + "=".repeat(80));
-      console.log("📝 SYSTEM PROMPT BEING USED:");
-      console.log("=".repeat(80));
-      console.log(systemPromptToUse);
-      console.log("=".repeat(80));
-      console.log(`Source: ${aiConfig?.systemPrompt ? "AI Config Table (Database)" : "Chat-specific"}`);
-      console.log("=".repeat(80) + "\n");
-    } else {
-      console.log("\n" + "=".repeat(80));
-      console.log("⚠️  NO SYSTEM PROMPT SET");
-      console.log("=".repeat(80));
-      console.log("AI Config Prompt:", aiConfig?.systemPrompt || "None");
-      console.log("Chat System Prompt:", chat.systemPrompt || "None");
-      console.log("=".repeat(80) + "\n");
     }
 
     // Inject zodiac from user's birthday

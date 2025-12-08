@@ -9,6 +9,7 @@ const { sendEmail, sendForgotPasswordEmail } = require("../utils/email");
 const NotificationService = require("./notification.service");
 const RevenueCatService = require("./revenuecat.service");
 const Logger = require("../utils/logger");
+const AuthLogService = require("./authLog.service");
 
 const buildPaymentPayload = async (userId) => {
   try {
@@ -37,82 +38,128 @@ const buildPaymentPayload = async (userId) => {
 };
 
 class UserService {
-  static async createUser(data) {
-    const { email, fullName, profilePhoto } = data;
-
-    // Check if user already exists
-    let user = await prisma.user.findUnique({ where: { email } });
-
-    // If user exists and is active, return error
-    if (user && user.status === "ACTIVE") {
-      return {
-        user,
-        message: "User with this email already exists and is active.",
-        success: true,
-      };
-    }
-
-    // Generate a 6-digit OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
-    console.log(`🔐 [CREATE USER] Generated OTP for ${email}: ${otp}`);
-
-    if (user) {
-      // User exists but is inactive - resend OTP
-      user = await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          fullName,
-          profilePhoto,
-          otp,
-          otpCreatedAt: new Date(),
-        },
-      });
-    } else {
-      // Create new user without password (will be set after OTP verification)
-      user = await prisma.user.create({
-        data: {
-          email,
-          fullName,
-          role: "CLIENT",
-          status: "INACTIVE",
-          otp,
-          profilePhoto,
-          otpCreatedAt: new Date(),
-          queryCount: 20, // Initialize with 20 free queries
-        },
-      });
-    }
-
-    // Send OTP email
+  static async createUser(data, requestMetadata = {}) {
     try {
-      console.log(`📧 [CREATE USER] Sending OTP email to: ${email}`);
-      await sendEmail({
-        email: email,
-        otp: otp,
-        subject: "Verify Your Email - Pryve",
-      });
-      console.log(`✅ [CREATE USER] OTP email sent successfully to: ${email}`);
-    } catch (emailError) {
-      console.error(
-        `❌ [CREATE USER] Failed to send OTP email to ${email}:`,
-        emailError.message
-      );
-      // Don't throw error here - user is created, just email failed
-      // You might want to implement a retry mechanism or queue for failed emails
-    }
+      const { email, fullName, profilePhoto } = data;
 
-    return {
-      message: "OTP sent to your email. Please verify to continue.",
-      success: true,
-      user: {
-        id: user.id,
+      // Check if user already exists
+      let user = await prisma.user.findUnique({ where: { email } });
+
+      // If user exists and is active, return error
+      if (user && user.status === "ACTIVE") {
+        // Log failed registration attempt (user already exists)
+        await AuthLogService.logAuthEvent({
+          eventType: "REGISTER",
+          status: "FAILED",
+          loginType: "EMAIL",
+          email,
+          errorMessage: "User with this email already exists and is active.",
+          errorCode: "USER_ALREADY_EXISTS",
+          ipAddress: requestMetadata.ipAddress,
+          userAgent: requestMetadata.userAgent,
+        });
+        
+        return {
+          user,
+          message: "User with this email already exists and is active.",
+          success: true,
+        };
+      }
+
+      // Generate a 6-digit OTP
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+      console.log(`🔐 [CREATE USER] Generated OTP for ${email}: ${otp}`);
+
+      if (user) {
+        // User exists but is inactive - resend OTP
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            fullName,
+            profilePhoto,
+            otp,
+            otpCreatedAt: new Date(),
+          },
+        });
+      } else {
+        // Create new user without password (will be set after OTP verification)
+        user = await prisma.user.create({
+          data: {
+            email,
+            fullName,
+            role: "CLIENT",
+            status: "INACTIVE",
+            otp,
+            profilePhoto,
+            otpCreatedAt: new Date(),
+            queryCount: 20, // Initialize with 20 free queries
+          },
+        });
+      }
+
+      // Send OTP email
+      try {
+        console.log(`📧 [CREATE USER] Sending OTP email to: ${email}`);
+        await sendEmail({
+          email: email,
+          otp: otp,
+          subject: "Verify Your Email - Pryve",
+        });
+        console.log(`✅ [CREATE USER] OTP email sent successfully to: ${email}`);
+      } catch (emailError) {
+        console.error(
+          `❌ [CREATE USER] Failed to send OTP email to ${email}:`,
+          emailError.message
+        );
+        // Don't throw error here - user is created, just email failed
+        // You might want to implement a retry mechanism or queue for failed emails
+      }
+
+      // Log successful registration
+      await AuthLogService.logAuthEvent({
+        eventType: "REGISTER",
+        status: "SUCCESS",
+        loginType: "EMAIL",
+        userId: user.id,
         email: user.email,
-        fullName: user.fullName,
-        profilePhoto: user.profilePhoto,
-        status: user.status,
-      },
-    };
+        userName: user.userName,
+        ipAddress: requestMetadata.ipAddress,
+        userAgent: requestMetadata.userAgent,
+      });
+
+      return {
+        message: "OTP sent to your email. Please verify to continue.",
+        success: true,
+        user: {
+          id: user.id,
+          email: user.email,
+          fullName: user.fullName,
+          profilePhoto: user.profilePhoto,
+          status: user.status,
+        },
+      };
+    } catch (error) {
+      // Log server errors (database failures, unexpected exceptions, etc.)
+      const { email } = data || {};
+      await AuthLogService.logAuthEvent({
+        eventType: "REGISTER",
+        status: "FAILED",
+        loginType: "EMAIL",
+        email: email || null,
+        errorMessage: error.message || "Internal server error during registration",
+        errorCode: error.statusCode || error.code || "SERVER_ERROR",
+        ipAddress: requestMetadata.ipAddress,
+        userAgent: requestMetadata.userAgent,
+        metadata: {
+          errorName: error.name,
+          stack: error.stack,
+        },
+      });
+      
+      // Re-throw the error so it's handled by the error handler
+      throw error;
+    }
   }
 
   static async updateUserAndProfile(userId, updateData) {
@@ -163,38 +210,110 @@ class UserService {
     return { message: "UserName Available", success: true };
   }
 
-  static async verifyOtp(data) {
-    const { email, otp } = data;
+  static async verifyOtp(data, requestMetadata = {}) {
+    try {
+      const { email, otp } = data;
 
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      throw new AppError("User not found.", HttpStatusCodes.BAD_REQUEST);
+      const user = await prisma.user.findUnique({ where: { email } });
+      if (!user) {
+        // Log failed OTP verification
+        await AuthLogService.logAuthEvent({
+          eventType: "VERIFY_OTP",
+          status: "FAILED",
+          loginType: "EMAIL",
+          email,
+          errorMessage: "User not found.",
+          errorCode: "USER_NOT_FOUND",
+          ipAddress: requestMetadata.ipAddress,
+          userAgent: requestMetadata.userAgent,
+        });
+        
+        throw new AppError("User not found.", HttpStatusCodes.BAD_REQUEST);
+      }
+
+      if (user.otp !== otp.toString()) {
+        // Log failed OTP verification
+        await AuthLogService.logAuthEvent({
+          eventType: "VERIFY_OTP",
+          status: "FAILED",
+          loginType: "EMAIL",
+          userId: user.id,
+          email: user.email,
+          errorMessage: "Invalid OTP.",
+          errorCode: "INVALID_OTP",
+          ipAddress: requestMetadata.ipAddress,
+          userAgent: requestMetadata.userAgent,
+        });
+        
+        throw new AppError("Invalid OTP.", HttpStatusCodes.BAD_REQUEST);
+      }
+
+      const otpExpiryTime = 10 * 60 * 1000;
+      if (Date.now() - user.otpCreatedAt.getTime() > otpExpiryTime) {
+        // Log failed OTP verification
+        await AuthLogService.logAuthEvent({
+          eventType: "VERIFY_OTP",
+          status: "FAILED",
+          loginType: "EMAIL",
+          userId: user.id,
+          email: user.email,
+          errorMessage: "OTP has expired.",
+          errorCode: "OTP_EXPIRED",
+          ipAddress: requestMetadata.ipAddress,
+          userAgent: requestMetadata.userAgent,
+        });
+        
+        throw new AppError("OTP has expired.", HttpStatusCodes.BAD_REQUEST);
+      }
+
+      const updatedUser = await prisma.user.update({
+        where: { id: user.id },
+        data: { status: "ACTIVE" },
+      });
+
+      await NotificationService.notifyNewUserRegistration(updatedUser);
+
+      const token = createJwtToken({ id: user.id, role: user.role });
+
+      // Log successful OTP verification
+      await AuthLogService.logAuthEvent({
+        eventType: "VERIFY_OTP",
+        status: "SUCCESS",
+        loginType: "EMAIL",
+        userId: updatedUser.id,
+        email: updatedUser.email,
+        userName: updatedUser.userName,
+        ipAddress: requestMetadata.ipAddress,
+        userAgent: requestMetadata.userAgent,
+      });
+
+      return {
+        message: "OTP verified successfully.",
+        success: true,
+        user: updatedUser,
+        token,
+      };
+    } catch (error) {
+      // Log server errors (database failures, unexpected exceptions, etc.)
+      const { email } = data || {};
+      await AuthLogService.logAuthEvent({
+        eventType: "VERIFY_OTP",
+        status: "FAILED",
+        loginType: "EMAIL",
+        email: email || null,
+        errorMessage: error.message || "Internal server error during OTP verification",
+        errorCode: error.statusCode || error.code || "SERVER_ERROR",
+        ipAddress: requestMetadata.ipAddress,
+        userAgent: requestMetadata.userAgent,
+        metadata: {
+          errorName: error.name,
+          stack: error.stack,
+        },
+      });
+      
+      // Re-throw the error so it's handled by the error handler
+      throw error;
     }
-
-    if (user.otp !== otp.toString()) {
-      throw new AppError("Invalid OTP.", HttpStatusCodes.BAD_REQUEST);
-    }
-
-    const otpExpiryTime = 10 * 60 * 1000;
-    if (Date.now() - user.otpCreatedAt.getTime() > otpExpiryTime) {
-      throw new AppError("OTP has expired.", HttpStatusCodes.BAD_REQUEST);
-    }
-
-    const updatedUser = await prisma.user.update({
-      where: { id: user.id },
-      data: { status: "ACTIVE" },
-    });
-
-    await NotificationService.notifyNewUserRegistration(updatedUser);
-
-    const token = createJwtToken({ id: user.id, role: user.role });
-
-    return {
-      message: "OTP verified successfully.",
-      success: true,
-      user: updatedUser,
-      token,
-    };
   }
 
   static async resendOtp(data) {
@@ -274,15 +393,28 @@ class UserService {
     };
   }
 
-  static async loginUser(data) {
-    const { email, password, role } = data;
-    if (!email || !password) {
-      return {
-        message: "Email, password, and role are required.",
-        success: false,
-      };
-    }
-    const user = await prisma.user.findUnique({
+  static async loginUser(data, requestMetadata = {}) {
+    try {
+      const { email, password, role } = data;
+      if (!email || !password) {
+        // Log failed login attempt
+        await AuthLogService.logAuthEvent({
+        eventType: "LOGIN",
+        status: "FAILED",
+        loginType: "EMAIL",
+        email,
+        errorMessage: "Email, password, and role are required.",
+          errorCode: "MISSING_CREDENTIALS",
+          ipAddress: requestMetadata.ipAddress,
+          userAgent: requestMetadata.userAgent,
+        });
+        
+        return {
+          message: "Email, password, and role are required.",
+          success: false,
+        };
+      }
+      const user = await prisma.user.findUnique({
       where: { email },
       select: {
         id: true,
@@ -296,56 +428,142 @@ class UserService {
         createdAt: true,
         updatedAt: true,
         isDeleted: true,
+        loginType: true,
       },
     });
-    if (!user) {
-      return {
-        message: "Invalid email or password.",
-        success: false,
-      };
-    }
+      if (!user) {
+        // Log failed login attempt
+        await AuthLogService.logAuthEvent({
+          eventType: "LOGIN",
+          status: "FAILED",
+          loginType: "EMAIL",
+          email,
+          errorMessage: "Invalid email or password.",
+          errorCode: "USER_NOT_FOUND",
+          ipAddress: requestMetadata.ipAddress,
+          userAgent: requestMetadata.userAgent,
+        });
+        
+        return {
+          message: "Invalid email or password.",
+          success: false,
+        };
+      }
 
-    // Check if account is deleted
-    if (user.isDeleted) {
-      return {
-        message: "This account has been deleted.",
-        success: false,
-      };
-    }
+      // Check if account is deleted
+      if (user.isDeleted) {
+        // Log failed login attempt
+        await AuthLogService.logAuthEvent({
+          eventType: "LOGIN",
+          status: "FAILED",
+          loginType: user.loginType || "EMAIL",
+          userId: user.id,
+          email: user.email,
+          errorMessage: "This account has been deleted.",
+          errorCode: "ACCOUNT_DELETED",
+          ipAddress: requestMetadata.ipAddress,
+          userAgent: requestMetadata.userAgent,
+        });
+        
+        return {
+          message: "This account has been deleted.",
+          success: false,
+        };
+      }
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return {
-        message: "Invalid email or password.",
-        success: false,
-      };
-    }
-    // if (user.role !== role) {
-    //   throw new AppError(
-    //     "Role mismatch. Access denied.",
-    //     HttpStatusCodes.UNAUTHORIZED
-    //   );
-    // }
-    if (user.status !== "ACTIVE") {
-      return {
-        message: "Account is inactive. Please verify your email.",
-        success: false,
-        status: user.status,
-      };
-    }
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (!isMatch) {
+        // Log failed login attempt
+        await AuthLogService.logAuthEvent({
+          eventType: "LOGIN",
+          status: "FAILED",
+          loginType: user.loginType || "EMAIL",
+          userId: user.id,
+          email: user.email,
+          errorMessage: "Invalid email or password.",
+          errorCode: "INVALID_PASSWORD",
+          ipAddress: requestMetadata.ipAddress,
+          userAgent: requestMetadata.userAgent,
+        });
+        
+        return {
+          message: "Invalid email or password.",
+          success: false,
+        };
+      }
+      // if (user.role !== role) {
+      //   throw new AppError(
+      //     "Role mismatch. Access denied.",
+      //     HttpStatusCodes.UNAUTHORIZED
+      //   );
+      // }
+      if (user.status !== "ACTIVE") {
+        // Log failed login attempt
+        await AuthLogService.logAuthEvent({
+          eventType: "LOGIN",
+          status: "FAILED",
+          loginType: user.loginType || "EMAIL",
+          userId: user.id,
+          email: user.email,
+          errorMessage: "Account is inactive. Please verify your email.",
+          errorCode: "ACCOUNT_INACTIVE",
+          ipAddress: requestMetadata.ipAddress,
+          userAgent: requestMetadata.userAgent,
+        });
+        
+        return {
+          message: "Account is inactive. Please verify your email.",
+          success: false,
+          status: user.status,
+        };
+      }
 
-    const token = createJwtToken({ id: user.id, role: user.role });
-    const paymentData = await buildPaymentPayload(user.id);
-    return {
-      message: "Login successful.",
-      success: true,
-      user,
-      token,
-      paymentData,
-    };
+      const token = createJwtToken({ id: user.id, role: user.role });
+      const paymentData = await buildPaymentPayload(user.id);
+      
+      // Log successful login
+      await AuthLogService.logAuthEvent({
+        eventType: "LOGIN",
+        status: "SUCCESS",
+        loginType: user.loginType || "EMAIL",
+        userId: user.id,
+        email: user.email,
+        userName: user.userName,
+        ipAddress: requestMetadata.ipAddress,
+        userAgent: requestMetadata.userAgent,
+      });
+      
+      return {
+        message: "Login successful.",
+        success: true,
+        user,
+        token,
+        paymentData,
+      };
+    } catch (error) {
+      // Log server errors (database failures, unexpected exceptions, etc.)
+      const { email } = data || {};
+      await AuthLogService.logAuthEvent({
+        eventType: "LOGIN",
+        status: "FAILED",
+        loginType: "EMAIL",
+        email: email || null,
+        errorMessage: error.message || "Internal server error during login",
+        errorCode: error.statusCode || error.code || "SERVER_ERROR",
+        ipAddress: requestMetadata.ipAddress,
+        userAgent: requestMetadata.userAgent,
+        metadata: {
+          errorName: error.name,
+          stack: error.stack,
+        },
+      });
+      
+      // Re-throw the error so it's handled by the error handler
+      throw error;
+    }
   }
 
-  static async socialLogin(data) {
+  static async socialLogin(data, requestMetadata = {}) {
     try {
       console.log("🔐 [SOCIAL LOGIN] Started with data:", JSON.stringify(data, null, 2));
       console.log("📦 [SOCIAL LOGIN] Request body received:", {
@@ -709,6 +927,20 @@ class UserService {
         status: user.status,
       });
       
+      // Log successful social login
+      await AuthLogService.logAuthEvent({
+        eventType: "SOCIAL_LOGIN",
+        status: "SUCCESS",
+        loginType: user.loginType,
+        userId: user.id,
+        email: user.email,
+        userName: user.userName,
+        provider: user.loginType,
+        providerId: user.providerId,
+        ipAddress: requestMetadata.ipAddress,
+        userAgent: requestMetadata.userAgent,
+      });
+      
     return {
       message: "Social login successful.",
       success: true,
@@ -717,6 +949,24 @@ class UserService {
       paymentData,
     };
     } catch (error) {
+      // Log failed social login (including server errors)
+      await AuthLogService.logAuthEvent({
+        eventType: "SOCIAL_LOGIN",
+        status: "FAILED",
+        loginType: data?.provider || null,
+        email: data?.email,
+        provider: data?.provider,
+        providerId: data?.providerId,
+        errorMessage: error?.message || error.message || "Internal server error during social login",
+        errorCode: error?.statusCode || error.code || "SERVER_ERROR",
+        ipAddress: requestMetadata.ipAddress,
+        userAgent: requestMetadata.userAgent,
+        metadata: {
+          errorName: error.name,
+          stack: error.stack,
+        },
+      });
+      
       console.error("❌ [SOCIAL LOGIN] Error:", {
         provider: data?.provider,
         email: data?.email || '(empty)',
