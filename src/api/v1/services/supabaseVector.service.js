@@ -32,70 +32,103 @@ class SupabaseVectorService {
    * @returns {Promise<Array>} Array of stored chunk IDs
    */
   static async storePromptChunks(promptText, metadata = {}, sourceId = null) {
+    console.log(`  🔧 Initializing Supabase client...`);
     this.initialize();
+    console.log(`  ✅ Supabase client initialized`);
 
     if (!promptText || promptText.trim().length === 0) {
       throw new Error('Prompt text cannot be empty');
     }
 
     // Check if table exists first
+    console.log(`  🔍 Checking if table '${this.tableName}' exists...`);
     try {
+      const checkStartTime = Date.now();
       const { error: checkError } = await this.supabase
         .from(this.tableName)
         .select('id')
         .limit(1);
+      const checkDuration = Date.now() - checkStartTime;
       
       if (checkError && checkError.code === 'PGRST205') {
+        console.error(`  ❌ Table '${this.tableName}' does not exist in Supabase`);
         throw new Error(
           `Table '${this.tableName}' does not exist in Supabase. ` +
           `Please create it first using the SQL script in SUPABASE_SETUP_QUICK_START.md`
         );
       }
+      console.log(`  ✅ Table check completed (${checkDuration}ms)`);
     } catch (error) {
       if (error.message.includes('does not exist')) {
         throw error;
       }
       // Other errors are fine, table might exist
+      console.log(`  ⚠️  Table check had non-critical error: ${error.message}`);
     }
 
-    // Process prompt in streaming fashion: chunk → embed → store → clear
-    // This prevents accumulating all embeddings in memory
-    const chunks = PromptChunkingService.splitIntoChunks(promptText, 1000, 200);
+    // Calculate total chunks first (without storing them)
+    console.log(`  📊 Calculating chunk count...`);
+    console.log(`  📝 Prompt text info: ${typeof promptText}, length: ${promptText ? promptText.length : 0} chars`);
     
-    if (chunks.length === 0) {
+    // Quick word count estimate without full split (to avoid blocking)
+    if (promptText && promptText.length > 0) {
+      const sampleSize = Math.min(1000, promptText.length);
+      const sample = promptText.substring(0, sampleSize);
+      const sampleWords = sample.split(/\s+/).length;
+      const estimatedWords = Math.floor((sampleWords / sampleSize) * promptText.length);
+      console.log(`  📝 Estimated word count: ~${estimatedWords} words (from sample)`);
+    }
+    
+    const chunkCountStartTime = Date.now();
+    
+    // Call the synchronous function - if it hangs, we'll see it in the logs
+    let totalChunks;
+    try {
+      totalChunks = PromptChunkingService.calculateChunkCount(promptText, 1000, 200);
+    } catch (error) {
+      console.error(`  ❌ Error calculating chunk count:`, error);
+      throw error;
+    }
+    
+    const chunkCountDuration = Date.now() - chunkCountStartTime;
+    console.log(`  ✅ Will create ${totalChunks} chunks (calculation took ${chunkCountDuration}ms)`);
+    
+    if (totalChunks === 0) {
       throw new Error('No chunks generated from prompt');
     }
 
-    console.log(`📦 Split prompt into ${chunks.length} chunks`);
-    console.log(`🔄 Processing chunks incrementally (generate → store → clear)...`);
+    console.log(`📦 Processing prompt for vector storage (will create ${totalChunks} chunks)`);
+    console.log(`🔄 Processing chunks one at a time using streaming (generate → store → clear)...`);
+    console.log(`⏱️  Estimated time: ~${Math.ceil(totalChunks * 2)} seconds (2s per chunk average)\n`);
 
     const insertedIds = [];
-    const totalChunks = chunks.length;
-    const processBatchSize = 2; // Process 2 chunks at a time: generate embedding → store → clear
+    let chunkIndex = 0;
+    const overallStartTime = Date.now();
 
-    // Process chunks in small batches: generate embedding and store immediately
-    for (let i = 0; i < chunks.length; i += processBatchSize) {
-      const batch = chunks.slice(i, i + processBatchSize);
+    // Use streaming generator to process chunks one at a time WITHOUT storing all chunks in memory
+    const chunkGenerator = PromptChunkingService.splitIntoChunksStream(promptText, 1000, 200);
+    
+    // Clear promptText reference immediately after creating generator to free memory
+    promptText = null;
+
+    // Process each chunk as it's generated (true streaming)
+    for (const chunk of chunkGenerator) {
+      chunkIndex++;
       
       try {
-        // Generate embeddings for this small batch only
-        const texts = batch.map(chunk => chunk.text);
-        console.log(`  Processing chunks ${i + 1}-${Math.min(i + processBatchSize, totalChunks)} of ${totalChunks}...`);
+        const progressPercent = Math.round((chunkIndex / totalChunks) * 100);
+        const chunkWordCount = chunk.text.trim().split(/\s+/).length;
+        console.log(`\n  [${chunkIndex}/${totalChunks}] (${progressPercent}%) Processing chunk...`);
+        console.log(`    Chunk size: ${chunk.text.length} chars, ${chunkWordCount} words`);
         
-        const embeddings = await PromptChunkingService.generateEmbeddingsBatch(texts, 'text-embedding-3-small', processBatchSize);
+        // Generate embedding for this single chunk only
+        const embedding = await PromptChunkingService.generateEmbedding(chunk.text);
         
-        // Clear texts immediately
-        texts.length = 0;
-
-        if (embeddings.length !== batch.length) {
-          throw new Error(`Mismatch: ${batch.length} chunks but ${embeddings.length} embeddings`);
-        }
-
-        // Prepare chunks for insertion (with embeddings)
-        const chunksToInsert = batch.map((chunk, idx) => ({
+        // Prepare chunk for insertion (with embedding)
+        const chunkToInsert = {
           content: chunk.text,
           chunk_index: chunk.index,
-          embedding: embeddings[idx],
+          embedding: embedding,
           metadata: {
             ...metadata,
             chunk_count: totalChunks,
@@ -104,47 +137,60 @@ class SupabaseVectorService {
           source_id: sourceId,
           is_active: true,
           usage_count: 0,
-        }));
+        };
 
-        // Store immediately
+        // Store immediately (single insert)
+        console.log(`    💾 Inserting into Supabase...`);
+        const insertStartTime = Date.now();
         const { data, error } = await this.supabase
           .from(this.tableName)
-          .insert(chunksToInsert)
+          .insert(chunkToInsert)
           .select('id');
+        const insertDuration = Date.now() - insertStartTime;
 
         if (error) {
-          console.error(`Error inserting chunks ${i + 1}-${i + batch.length}:`, error);
-          throw new Error(`Failed to store chunks: ${error.message}`);
+          console.error(`    ❌ Supabase insert error:`, error);
+          throw new Error(`Failed to store chunk: ${error.message}`);
         }
 
-        if (data) {
-          insertedIds.push(...data.map(item => item.id));
+        if (data && data[0]) {
+          insertedIds.push(data[0].id);
+          console.log(`    ✅ Chunk stored successfully (ID: ${data[0].id}, ${insertDuration}ms)`);
         }
 
         // Clear everything from memory immediately
-        batch.length = 0;
-        embeddings.length = 0;
-        chunksToInsert.length = 0;
+        chunk.text = null;
+        chunkToInsert.content = null;
+        chunkToInsert.embedding = null;
+        embedding.length = 0;
         
-        // Force garbage collection if available
-        if (global.gc && i % 5 === 0) {
+        // Force garbage collection every 10 chunks
+        if (global.gc && chunkIndex % 10 === 0 && chunkIndex > 0) {
+          console.log(`    🗑️  Running garbage collection...`);
           global.gc();
         }
         
-        // Small delay between batches
-        if (i + processBatchSize < chunks.length) {
-          await new Promise(resolve => setTimeout(resolve, 100));
+        // Small delay between chunks to prevent memory pressure and rate limits
+        if (chunkIndex < totalChunks) {
+          await new Promise(resolve => setTimeout(resolve, 50));
         }
       } catch (error) {
-        console.error(`Error processing batch ${i + 1}-${i + batch.length}:`, error);
-        // Continue with next batch
+        console.error(`\n  ❌ Error processing chunk ${chunkIndex}/${totalChunks}:`, error.message);
+        if (error.stack) {
+          console.error(`  Stack trace:`, error.stack);
+        }
+        // Continue with next chunk
       }
     }
 
-    // Clear chunks array
-    chunks.length = 0;
-
-    console.log(`✅ Stored ${insertedIds.length} chunks in Supabase Vector DB`);
+    const overallDuration = Date.now() - overallStartTime;
+    const avgTimePerChunk = totalChunks > 0 ? (overallDuration / totalChunks / 1000).toFixed(2) : 0;
+    
+    console.log(`\n✅ Successfully stored ${insertedIds.length} of ${totalChunks} chunks in Supabase Vector DB`);
+    console.log(`⏱️  Total time: ${(overallDuration / 1000).toFixed(2)}s (avg ${avgTimePerChunk}s per chunk)`);
+    if (insertedIds.length < totalChunks) {
+      console.warn(`⚠️  Warning: ${totalChunks - insertedIds.length} chunks failed to store`);
+    }
     return insertedIds;
   }
 
@@ -442,29 +488,36 @@ class SupabaseVectorService {
    * @returns {Promise<number>} Number of deleted chunks
    */
   static async deleteChunksBySource(sourceId) {
+    console.log(`    🔧 Initializing Supabase for deletion (sourceId: ${sourceId})...`);
     this.initialize();
+    console.log(`    ✅ Supabase initialized`);
 
     try {
+      console.log(`    🗑️  Deleting chunks from table '${this.tableName}' where source_id = ${sourceId}...`);
+      const deleteStartTime = Date.now();
       const { data, error } = await this.supabase
         .from(this.tableName)
         .delete()
         .eq('source_id', sourceId)
         .select('id');
+      const deleteDuration = Date.now() - deleteStartTime;
 
       if (error) {
         // If table doesn't exist, that's okay - just log and continue
         if (error.code === 'PGRST205') {
-          console.log(`ℹ️ Table '${this.tableName}' does not exist yet. Skipping deletion.`);
+          console.log(`    ℹ️ Table '${this.tableName}' does not exist yet. Skipping deletion.`);
           return 0;
         }
-        console.error('Error deleting chunks by source:', error);
+        console.error(`    ❌ Error deleting chunks by source:`, error);
         return 0;
       }
 
-      return data ? data.length : 0;
+      const deletedCount = data ? data.length : 0;
+      console.log(`    ✅ Deleted ${deletedCount} chunks (${deleteDuration}ms)`);
+      return deletedCount;
     } catch (error) {
       // Non-critical error - table might not exist yet
-      console.log(`ℹ️ Could not delete chunks by source (table may not exist): ${error.message}`);
+      console.log(`    ⚠️ Could not delete chunks by source (table may not exist): ${error.message}`);
       return 0;
     }
   }

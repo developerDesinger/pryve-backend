@@ -57,11 +57,20 @@ class AIConfigService {
           
           // Delete old chunks for this source if updating
           if (existingConfig) {
-            await SupabaseVectorService.deleteChunksBySource(existingConfig.id);
+            console.log(`🗑️  Deleting old chunks for source ID: ${existingConfig.id}...`);
+            const deleteStartTime = Date.now();
+            const deletedCount = await SupabaseVectorService.deleteChunksBySource(existingConfig.id);
+            const deleteDuration = Date.now() - deleteStartTime;
+            console.log(`✅ Deleted ${deletedCount} old chunks (${deleteDuration}ms)`);
+          } else {
+            console.log(`ℹ️  No existing config found, skipping old chunk deletion`);
           }
 
           // Store chunks in Supabase Vector DB
           const sourceId = aiConfig.id;
+          console.log(`🚀 Starting to store chunks in Supabase Vector DB (sourceId: ${sourceId})...`);
+          const storeStartTime = Date.now();
+          
           await SupabaseVectorService.storePromptChunks(
             systemPrompt,
             {
@@ -72,8 +81,9 @@ class AIConfigService {
             },
             sourceId
           );
-
-          console.log(`✅ Prompt chunks stored in Supabase Vector DB`);
+          
+          const storeDuration = Date.now() - storeStartTime;
+          console.log(`✅ Prompt chunks stored in Supabase Vector DB (total: ${storeDuration}ms)`);
         } else {
           console.log(`ℹ️ Prompt too small (${wordCount} words), skipping vector storage`);
         }
