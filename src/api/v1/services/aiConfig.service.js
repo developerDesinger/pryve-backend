@@ -4,7 +4,13 @@ const HttpStatusCodes = require("../enums/httpStatusCode");
 const SupabaseVectorService = require("./supabaseVector.service");
 
 class AIConfigService {
-  static async createOrUpdateAIConfig(data) {
+  static async createOrUpdateAIConfig(data, sessionId = null, progressCallback = null) {
+    console.log(`[AIConfigService] ==========================================`);
+    console.log(`[AIConfigService] createOrUpdateAIConfig called`);
+    console.log(`[AIConfigService] sessionId: ${sessionId || 'NULL'}`);
+    console.log(`[AIConfigService] progressCallback type: ${typeof progressCallback}`);
+    console.log(`[AIConfigService] progressCallback is function: ${typeof progressCallback === 'function'}`);
+    console.log(`[AIConfigService] progressCallback truthy: ${!!progressCallback}`);
     const {
       systemPrompt,
       systemPromptActive,
@@ -69,7 +75,23 @@ class AIConfigService {
           // Store chunks in Supabase Vector DB
           const sourceId = aiConfig.id;
           console.log(`🚀 Starting to store chunks in Supabase Vector DB (sourceId: ${sourceId})...`);
+          console.log(`[AIConfigService] About to call storePromptChunks`);
+          console.log(`[AIConfigService] progressCallback before call: ${progressCallback ? 'EXISTS' : 'NULL'}`);
+          console.log(`[AIConfigService] progressCallback type: ${typeof progressCallback}`);
+          if (progressCallback) {
+            console.log(`[AIConfigService] progressCallback.toString(): ${progressCallback.toString().substring(0, 100)}...`);
+          }
           const storeStartTime = Date.now();
+          
+          // Ensure callback is passed correctly - use a wrapper to ensure it's not lost
+          const wrappedCallback = progressCallback ? (progress) => {
+            console.log(`[AIConfigService] Wrapped callback invoked, forwarding to original callback`);
+            try {
+              progressCallback(progress);
+            } catch (error) {
+              console.error(`[AIConfigService] Error in wrapped callback:`, error);
+            }
+          } : null;
           
           await SupabaseVectorService.storePromptChunks(
             systemPrompt,
@@ -79,7 +101,8 @@ class AIConfigService {
               prompt_active: systemPromptActive,
               word_count: wordCount,
             },
-            sourceId
+            sourceId,
+            wrappedCallback || progressCallback // Use wrapped if available, fallback to original
           );
           
           const storeDuration = Date.now() - storeStartTime;

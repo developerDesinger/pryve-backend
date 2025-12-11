@@ -215,51 +215,63 @@ class PromptChunkingService {
    * Generate embeddings for multiple text chunks (batch processing)
    * @param {Array<string>} texts - Array of texts to generate embeddings for
    * @param {string} model - Embedding model to use
-   * @param {number} batchSize - Number of texts to process in each batch (default: 100)
+   * @param {number} batchSize - Number of texts to process in each batch (default: 500)
    * @returns {Promise<Array<number[]>>} Array of embedding arrays
    */
-  static async generateEmbeddingsBatch(texts, model = 'text-embedding-3-small', batchSize = 3) {
+  static async generateEmbeddingsBatch(texts, model = 'text-embedding-3-small', batchSize = 500) {
     if (!Array.isArray(texts) || texts.length === 0) {
       return [];
     }
 
     const openai = this.initializeOpenAI();
     const embeddings = [];
+    const totalBatches = Math.ceil(texts.length / batchSize);
 
-    // Process in very small batches (3 at a time) to avoid memory issues
-    // Also add delay between batches to prevent rate limits
+    // Process in optimized batches (OpenAI supports up to 2048 inputs per request)
+    // Using 500 for safety while maximizing throughput
     for (let i = 0; i < texts.length; i += batchSize) {
       const batch = texts.slice(i, i + batchSize);
+      const currentBatch = Math.floor(i / batchSize) + 1;
       
       try {
-        console.log(`  Generating embeddings for batch ${i + 1}-${Math.min(i + batchSize, texts.length)} of ${texts.length}...`);
+        if (totalBatches > 1) {
+          console.log(`      🤖 OpenAI batch ${currentBatch}/${totalBatches}: ${batch.length} texts...`);
+        }
         
+        const batchStartTime = Date.now();
         const response = await openai.embeddings.create({
           model: model,
           input: batch,
         });
+        const batchDuration = Date.now() - batchStartTime;
 
         if (response.data) {
           const batchEmbeddings = response.data.map(item => item.embedding);
           embeddings.push(...batchEmbeddings);
+          
+          if (totalBatches > 1) {
+            console.log(`      ✅ Batch ${currentBatch}/${totalBatches} complete (${batchDuration}ms)`);
+          }
           
           // Clear response from memory immediately
           response.data = null;
           batch.length = 0;
         }
         
-        // Force garbage collection hint and delay between batches
-        if (global.gc) {
-          global.gc();
-        }
-        
-        // Small delay between batches to prevent rate limits and reduce memory pressure
-        if (i + batchSize < texts.length) {
-          await new Promise(resolve => setTimeout(resolve, 200));
+        // Minimal delay between batches (10ms instead of 200ms)
+        if (i + batchSize < texts.length && totalBatches > 1) {
+          await new Promise(resolve => setTimeout(resolve, 10));
         }
       } catch (error) {
-        console.error(`Error generating embeddings for batch ${i}-${i + batch.length}:`, error);
+        console.error(`      ❌ Error generating embeddings for batch ${currentBatch}/${totalBatches}:`, error.message);
+        if (error.status) {
+          console.error(`      Status: ${error.status}, Code: ${error.code}`);
+        }
         // Continue with next batch even if one fails
+        // Add null embeddings to maintain array length
+        for (let j = 0; j < batch.length; j++) {
+          embeddings.push(null);
+        }
       }
     }
 
