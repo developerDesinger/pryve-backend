@@ -98,7 +98,7 @@ class SupabaseVectorService {
     // Call the synchronous function - if it hangs, we'll see it in the logs
     let totalChunks;
     try {
-      totalChunks = PromptChunkingService.calculateChunkCount(promptText, 1000, 200);
+      totalChunks = PromptChunkingService.calculateChunkCount(promptText, 10000, 0);
     } catch (error) {
       console.error(`  ❌ Error calculating chunk count:`, error);
       throw error;
@@ -111,9 +111,9 @@ class SupabaseVectorService {
       throw new Error('No chunks generated from prompt');
     }
 
-    // Optimized batch sizes for speed while maintaining memory safety
-    const batchSize = totalChunks > 1000 ? 100 : 50; // Process 50-100 chunks per batch
-    const embeddingBatchSize = 500; // OpenAI supports up to 2048, using 500 for safety
+    // Optimized batch sizes for maximum speed
+    const batchSize = totalChunks > 2000 ? 300 : totalChunks > 1000 ? 200 : 100; // Process 100-300 chunks per batch
+    const embeddingBatchSize = 1500; // OpenAI supports up to 2048, using 1500 for safety and speed
     
     console.log(`📦 Processing prompt for vector storage (will create ${totalChunks} chunks)`);
     console.log(`🔄 Processing in batches: ${batchSize} chunks per batch, ${embeddingBatchSize} embeddings per OpenAI call`);
@@ -145,7 +145,7 @@ class SupabaseVectorService {
     const overallStartTime = Date.now();
     
     // Use streaming generator - process batches as they come (memory efficient)
-    const chunkGenerator = PromptChunkingService.splitIntoChunksStream(promptText, 1000, 200);
+    const chunkGenerator = PromptChunkingService.splitIntoChunksStream(promptText, 10000, 0);
     
     // Clear promptText reference immediately to free memory
     promptText = null;
@@ -214,10 +214,7 @@ class SupabaseVectorService {
           global.gc();
         }
         
-        // Minimal delay between batches (10ms instead of 50ms per chunk)
-        if (batchNumber < totalBatches) {
-          await new Promise(resolve => setTimeout(resolve, 10));
-        }
+        // No delay - process batches as fast as possible
       }
     }
     
@@ -349,8 +346,7 @@ class SupabaseVectorService {
         embedding: validEmbeddings[idx],
         metadata: {
           ...metadata,
-          chunk_count: totalChunks,
-          created_at: new Date().toISOString(),
+          // Removed chunk_count and created_at (redundant with table columns)
         },
         source_id: sourceId,
         is_active: true,
@@ -417,10 +413,7 @@ class SupabaseVectorService {
       embeddings.length = 0;
       chunksToInsert.length = 0;
       
-      // Minimal delay between batches (10ms instead of 100ms)
-      if (batchNumber < totalBatches) {
-        await new Promise(resolve => setTimeout(resolve, 10));
-      }
+      // No delay - process batches as fast as possible
     } catch (error) {
       console.error(`\n  ❌ Error processing batch ${batchNumber}/${totalBatches}:`, error.message);
       if (error.stack) {
@@ -667,6 +660,36 @@ class SupabaseVectorService {
   }
 
   /**
+   * Get count of chunks for a specific source (for verification after deletion)
+   * @param {string} sourceId - Source ID to check
+   * @returns {Promise<number>} Number of chunks for this source
+   */
+  static async getChunkCountBySource(sourceId) {
+    if (!sourceId) {
+      return 0;
+    }
+
+    this.initialize();
+
+    try {
+      const { count, error } = await this.supabase
+        .from(this.tableName)
+        .select('*', { count: 'exact', head: true })
+        .eq('source_id', sourceId);
+
+      if (error) {
+        console.error(`Error getting chunk count for source ${sourceId}:`, error);
+        return 0;
+      }
+
+      return count || 0;
+    } catch (error) {
+      console.error(`Error getting chunk count for source ${sourceId}:`, error);
+      return 0;
+    }
+  }
+
+  /**
    * Archive old prompts (mark as inactive)
    * @param {number} daysOld - Archive prompts older than this many days
    * @returns {Promise<number>} Number of archived prompts
@@ -724,6 +747,11 @@ class SupabaseVectorService {
    * @returns {Promise<number>} Number of deleted chunks
    */
   static async deleteChunksBySource(sourceId) {
+    if (!sourceId) {
+      console.log(`    ⚠️  No sourceId provided, skipping deletion`);
+      return 0;
+    }
+
     console.log(`    🔧 Initializing Supabase for deletion (sourceId: ${sourceId})...`);
     this.initialize();
     console.log(`    ✅ Supabase initialized`);

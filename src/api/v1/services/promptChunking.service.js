@@ -218,7 +218,7 @@ class PromptChunkingService {
    * @param {number} batchSize - Number of texts to process in each batch (default: 500)
    * @returns {Promise<Array<number[]>>} Array of embedding arrays
    */
-  static async generateEmbeddingsBatch(texts, model = 'text-embedding-3-small', batchSize = 500) {
+  static async generateEmbeddingsBatch(texts, model = 'text-embedding-3-small', batchSize = 1500) {
     if (!Array.isArray(texts) || texts.length === 0) {
       return [];
     }
@@ -258,10 +258,7 @@ class PromptChunkingService {
           batch.length = 0;
         }
         
-        // Minimal delay between batches (10ms instead of 200ms)
-        if (i + batchSize < texts.length && totalBatches > 1) {
-          await new Promise(resolve => setTimeout(resolve, 10));
-        }
+        // No delay - OpenAI can handle rapid requests efficiently
       } catch (error) {
         console.error(`      ❌ Error generating embeddings for batch ${currentBatch}/${totalBatches}:`, error.message);
         if (error.status) {

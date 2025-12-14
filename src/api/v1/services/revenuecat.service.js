@@ -219,18 +219,60 @@ class RevenueCatService {
    * @returns {Promise<Object>} - Active subscription details
    */
   static async getActiveSubscription(userId) {
+    const now = new Date();
+    
+    // Find the most recent active subscription that:
+    // 1. Has isActive = true
+    // 2. Is not a CANCELLATION or EXPIRATION event
+    // 3. Has expiration date in the future (or no expiration date for lifetime subscriptions)
     const activePayment = await prisma.revenueCatPayment.findFirst({
       where: {
         userId,
         isActive: true,
+        eventType: {
+          notIn: ['CANCELLATION', 'EXPIRATION'], // Exclude cancellation/expiration events
+        },
+        OR: [
+          { expirationDate: null }, // No expiration (lifetime subscription)
+          { expirationDate: { gt: now } }, // Expiration date is in the future
+        ],
       },
       orderBy: { createdAt: "desc" },
+    });
+
+    // Double-check: Even if isActive is true, verify expiration date is still valid
+    let hasActiveSubscription = false;
+    if (activePayment) {
+      if (!activePayment.expirationDate) {
+        // Lifetime subscription
+        hasActiveSubscription = true;
+      } else {
+        // Check if expiration date is still in the future
+        const expirationDate = new Date(activePayment.expirationDate);
+        hasActiveSubscription = expirationDate > now;
+      }
+    }
+
+    // Add logging for debugging
+    console.log('🔍 [SUBSCRIPTION CHECK]', {
+      userId,
+      foundRecord: !!activePayment,
+      hasActiveSubscription,
+      recordDetails: activePayment ? {
+        id: activePayment.id,
+        eventType: activePayment.eventType,
+        isActive: activePayment.isActive,
+        expirationDate: activePayment.expirationDate,
+        entitlementStatus: activePayment.entitlementStatus,
+        createdAt: activePayment.createdAt,
+      } : null,
+      currentTime: now,
     });
 
     return {
       success: true,
       data: activePayment,
-      hasActiveSubscription: !!activePayment,
+      hasActiveSubscription,
     };
   }
 

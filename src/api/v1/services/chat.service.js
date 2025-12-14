@@ -1659,33 +1659,29 @@ Use this context to provide accurate and helpful responses to the user's questio
     }
 
     if (normalized === "goals-achieved") {
-      const [messages, favorites] = await Promise.all([
-        prisma.message.findMany({
-          where: {
+      // Get only favorite messages
+      const favorites = await prisma.userMessageFavorite.findMany({
+        where: {
+          userId,
+          message: {
             chat: { userId, isDeleted: false },
             isDeleted: false,
             isFromAI: false,
             emotion: { not: null },
           },
-          include: {
-            chat: { select: { id: true, name: true, type: true } },
-          },
-          orderBy: { createdAt: "asc" },
-          take: 500,
-        }),
-        prisma.userMessageFavorite.findMany({
-          where: { userId },
-          include: {
-            message: {
-              include: {
-                chat: { select: { id: true, name: true, type: true } },
-              },
+        },
+        include: {
+          message: {
+            include: {
+              chat: { select: { id: true, name: true, type: true } },
             },
           },
-          orderBy: { createdAt: "desc" },
-          take: 100,
-        }),
-      ]);
+        },
+        orderBy: { createdAt: "desc" },
+        take: 500,
+      });
+
+      const messages = favorites.map((fav) => fav.message);
 
       const detectedGoals = deriveGoalsFromActivity(messages, favorites);
       const boundedGoals = detectedGoals.slice(0, Number(limit) || 20);
@@ -1724,20 +1720,30 @@ Use this context to provide accurate and helpful responses to the user's questio
     }
 
     if (normalized === "breakthrough-days") {
-      const rawMessages = await prisma.message.findMany({
+      // Get only favorite messages
+      const favoriteMessages = await prisma.userMessageFavorite.findMany({
         where: {
-          chat: { userId, isDeleted: false },
-          isDeleted: false,
-          isFromAI: false,
-          emotion: { not: null },
-          emotionConfidence: { gte: 0.7 },
+          userId,
+          message: {
+            chat: { userId, isDeleted: false },
+            isDeleted: false,
+            isFromAI: false,
+            emotion: { not: null },
+            emotionConfidence: { gte: 0.7 },
+          },
         },
         include: {
-          chat: { select: { id: true, name: true, type: true } },
+          message: {
+            include: {
+              chat: { select: { id: true, name: true, type: true } },
+            },
+          },
         },
         orderBy: { createdAt: "desc" },
         take: 700,
       });
+
+      const rawMessages = favoriteMessages.map((fav) => fav.message);
 
       const grouped = rawMessages.reduce((acc, msg) => {
         const key = toDateKey(msg.createdAt);
@@ -1824,23 +1830,49 @@ Use this context to provide accurate and helpful responses to the user's questio
     }
 
     const take = Math.min(Number(limit) || 20, 50);
-    const messages = await prisma.message.findMany({
+    
+    // Handle cursor pagination for favorite messages
+    let cursorFilter = {};
+    if (cursor) {
+      // Find the favorite record for the cursor message ID
+      const cursorFavorite = await prisma.userMessageFavorite.findUnique({
+        where: {
+          messageId_userId: {
+            messageId: cursor,
+            userId,
+          },
+        },
+      });
+      
+      if (cursorFavorite) {
+        cursorFilter = {
+          createdAt: { lt: cursorFavorite.createdAt },
+        };
+      }
+    }
+    
+    // Get only favorite messages
+    const favoriteMessages = await prisma.userMessageFavorite.findMany({
       where: {
-        ...filterConfig.where,
-        chat: { userId, isDeleted: false },
+        userId,
+        ...cursorFilter,
+        message: {
+          ...filterConfig.where,
+          chat: { userId, isDeleted: false },
+        },
       },
       include: {
-        chat: { select: { id: true, name: true, type: true } },
+        message: {
+          include: {
+            chat: { select: { id: true, name: true, type: true } },
+          },
+        },
       },
       orderBy: { createdAt: "desc" },
       take,
-      ...(cursor
-        ? {
-            skip: 1,
-            cursor: { id: cursor },
-          }
-        : {}),
     });
+    
+    const messages = favoriteMessages.map((fav) => fav.message);
 
     return {
       success: true,
@@ -2113,10 +2145,9 @@ Use this context to provide accurate and helpful responses to the user's questio
           return msgDate >= weekStart && msgDate <= weekEnd;
         });
 
-        const progress = Math.min(
-          100,
-          Math.floor((weekMsgs.length / 20) * 100)
-        );
+        // Calculate progress: 20 messages = 100%, capped at 100%
+        const rawProgress = (weekMsgs.length / 20) * 100;
+        const progress = Math.min(100, Math.max(0, Math.floor(rawProgress)));
 
         // Get dominant emotion
         const emotionCounts = {};

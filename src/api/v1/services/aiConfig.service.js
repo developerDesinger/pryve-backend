@@ -61,20 +61,44 @@ class AIConfigService {
         if (wordCount > 500) {
           console.log(`📦 Processing prompt for vector storage (${wordCount} words)...`);
           
-          // Delete old chunks for this source if updating
-          if (existingConfig) {
-            console.log(`🗑️  Deleting old chunks for source ID: ${existingConfig.id}...`);
-            const deleteStartTime = Date.now();
-            const deletedCount = await SupabaseVectorService.deleteChunksBySource(existingConfig.id);
-            const deleteDuration = Date.now() - deleteStartTime;
-            console.log(`✅ Deleted ${deletedCount} old chunks (${deleteDuration}ms)`);
-          } else {
-            console.log(`ℹ️  No existing config found, skipping old chunk deletion`);
-          }
-
           // Store chunks in Supabase Vector DB
           const sourceId = aiConfig.id;
-          console.log(`🚀 Starting to store chunks in Supabase Vector DB (sourceId: ${sourceId})...`);
+          
+          // ==========================================
+          // STEP 1: ALWAYS DELETE OLD CHUNKS FIRST
+          // ==========================================
+          // This ensures old chunks are removed before storing new ones
+          
+          // Delete old chunks for the NEW sourceId (handles updates with same ID)
+          console.log(`🗑️  [STEP 1] Deleting existing chunks for source ID: ${sourceId}...`);
+          const deleteStartTime = Date.now();
+          const deletedCount = await SupabaseVectorService.deleteChunksBySource(sourceId);
+          const deleteDuration = Date.now() - deleteStartTime;
+          console.log(`✅ [STEP 1] Deleted ${deletedCount} existing chunks for source ${sourceId} (${deleteDuration}ms)`);
+          
+          // Also delete chunks for OLD sourceId if it's different (handles ID changes)
+          if (existingConfig && existingConfig.id !== sourceId) {
+            console.log(`🗑️  [STEP 1] Also deleting old chunks for previous source ID: ${existingConfig.id}...`);
+            const oldDeleteStartTime = Date.now();
+            const oldDeletedCount = await SupabaseVectorService.deleteChunksBySource(existingConfig.id);
+            const oldDeleteDuration = Date.now() - oldDeleteStartTime;
+            console.log(`✅ [STEP 1] Deleted ${oldDeletedCount} old chunks from previous source (${oldDeleteDuration}ms)`);
+          }
+          
+          // Verify deletion completed (double-check)
+          const remainingChunks = await SupabaseVectorService.getChunkCountBySource(sourceId);
+          if (remainingChunks > 0) {
+            console.warn(`⚠️  [STEP 1] WARNING: ${remainingChunks} chunks still exist for source ${sourceId} after deletion. Retrying...`);
+            const retryDeletedCount = await SupabaseVectorService.deleteChunksBySource(sourceId);
+            console.log(`✅ [STEP 1] Retry deleted ${retryDeletedCount} additional chunks`);
+          } else {
+            console.log(`✅ [STEP 1] Verification: No chunks remain for source ${sourceId} - deletion confirmed`);
+          }
+          
+          // ==========================================
+          // STEP 2: STORE NEW CHUNKS (only after deletion is confirmed)
+          // ==========================================
+          console.log(`🚀 [STEP 2] Starting to store NEW chunks in Supabase Vector DB (sourceId: ${sourceId})...`);
           console.log(`[AIConfigService] About to call storePromptChunks`);
           console.log(`[AIConfigService] progressCallback before call: ${progressCallback ? 'EXISTS' : 'NULL'}`);
           console.log(`[AIConfigService] progressCallback type: ${typeof progressCallback}`);
