@@ -594,17 +594,30 @@ class ChatService {
 
     // Try to get relevant prompt chunks from Supabase Vector DB
     let usingVectorDB = false;
+    console.log('\n' + '='.repeat(80));
+    console.log('🚀 SYSTEM PROMPT RESOLUTION - Starting...');
+    console.log('='.repeat(80));
+    console.log(`📋 AI Config exists: ${!!aiConfig}`);
+    console.log(`📋 systemPromptActive: ${aiConfig?.systemPromptActive}`);
+    console.log(`📋 systemPrompt exists: ${!!aiConfig?.systemPrompt}`);
+    console.log(`📋 User message: "${content?.substring(0, 50)}..."`);
+
     if (aiConfig?.systemPromptActive && aiConfig?.systemPrompt && content) {
       try {
         const SupabaseVectorService = require("./supabaseVector.service");
         const hasChunks = await SupabaseVectorService.hasChunks();
+        const chunkCount = await SupabaseVectorService.getChunkCount();
+        
+        console.log(`\n🗄️  Supabase Vector DB Check:`);
+        console.log(`   Has chunks: ${hasChunks}`);
+        console.log(`   Total active chunks: ${chunkCount}`);
         
         if (hasChunks) {
           // Get relevant context from Supabase Vector DB
           const relevantContext = await SupabaseVectorService.getRelevantPromptContext(
             content,
             3,    // topK: Get top 3 most relevant chunks
-            0.5   // minSimilarity: Minimum 50% similarity
+            0.3   // minSimilarity: Minimum 30% similarity (lowered for broader matching)
           );
 
           if (relevantContext) {
@@ -618,16 +631,27 @@ Use this context to provide accurate and helpful responses to the user's questio
             usingVectorDB = true;
             
             console.log("\n" + "=".repeat(80));
-            console.log("✅ USING SUPABASE VECTOR DB - RELEVANT CHUNKS RETRIEVED");
+            console.log("✅ SUCCESS: USING SUPABASE VECTOR DB CHUNKS!");
             console.log("=".repeat(80));
-            console.log(`Context length: ${relevantContext.length} characters`);
+            console.log(`📊 Context length: ${relevantContext.length} characters`);
+            console.log(`📊 Full prompt length would be: ${aiConfig.systemPrompt.length} characters`);
+            console.log(`📊 Savings: ${((1 - relevantContext.length / aiConfig.systemPrompt.length) * 100).toFixed(1)}% smaller`);
             console.log("=".repeat(80) + "\n");
+          } else {
+            console.log('\n⚠️  No relevant chunks returned - will use full prompt');
           }
+        } else {
+          console.log('\n⚠️  No chunks in Supabase - will use full prompt');
         }
       } catch (error) {
-        console.error('Error retrieving from Supabase Vector DB:', error);
+        console.error('❌ Error retrieving from Supabase Vector DB:', error);
         // Fall through to use full prompt
       }
+    } else {
+      console.log('\n⚠️  Conditions not met for vector DB:');
+      if (!aiConfig?.systemPromptActive) console.log('   - systemPromptActive is false');
+      if (!aiConfig?.systemPrompt) console.log('   - No system prompt configured');
+      if (!content) console.log('   - No user content provided');
     }
 
     // Fallback: Use full prompt if vector DB didn't work or isn't available

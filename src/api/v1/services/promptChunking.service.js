@@ -39,17 +39,36 @@ class PromptChunkingService {
     // This avoids splitting the entire text for very large documents
     const estimatedWordCount = Math.floor(textLength / 6);
     
+    // If text is relatively short compared to the chunk size, we still want
+    // a small number of meaningful chunks instead of always returning 1.
     if (estimatedWordCount <= chunkSize) {
+      const words = trimmedText.split(/\s+/);
+      const totalWords = words.length;
+
+      // Aim for up to 3 chunks for short prompts
+      const targetChunks = Math.min(3, totalWords);
+      const effectiveChunkSize = Math.max(
+        1,
+        Math.ceil(totalWords / targetChunks)
+      );
+
       const duration = Date.now() - startTime;
-      console.log(`      ✅ Quick estimate: 1 chunk (${duration}ms)`);
-      return 1;
+      const calculatedChunks = Math.ceil(totalWords / effectiveChunkSize);
+      console.log(
+        `      ✅ Short-text estimate: ${calculatedChunks} chunk(s) (${duration}ms)`
+      );
+      return calculatedChunks;
     }
 
-    // For accurate count, we need to split, but do it efficiently
-    console.log(`      🔄 Splitting text into words (estimated ${estimatedWordCount} words)...`);
+    // For accurate count on larger texts, we need to split, but do it efficiently
+    console.log(
+      `      🔄 Splitting text into words (estimated ${estimatedWordCount} words)...`
+    );
     const words = trimmedText.split(/\s+/);
     const splitDuration = Date.now() - startTime;
-    console.log(`      ✅ Split complete: ${words.length} words (${splitDuration}ms)`);
+    console.log(
+      `      ✅ Split complete: ${words.length} words (${splitDuration}ms)`
+    );
     
     if (words.length <= chunkSize) {
       return 1;
@@ -61,14 +80,20 @@ class PromptChunkingService {
     while (startIndex < words.length) {
       const endIndex = Math.min(startIndex + chunkSize, words.length);
       count++;
+      
+      // FIX: If we've reached the end of the text, stop
+      if (endIndex >= words.length) {
+        break;
+      }
+      
       startIndex = endIndex - overlap;
       
-      // Prevent infinite loop
+      // Prevent infinite loop if overlap >= chunkSize
       if (overlap >= chunkSize) {
         break;
       }
       
-      // Safety check to prevent infinite loops
+      // Safety check
       if (count > 100000) {
         console.error(`      ⚠️  Safety break: chunk count exceeded 100,000`);
         break;
@@ -114,6 +139,11 @@ class PromptChunkingService {
         index: chunkIndex,
       });
 
+      // FIX: If we've reached the end of the text, stop
+      if (endIndex >= words.length) {
+        break;
+      }
+
       // Move start index forward, accounting for overlap
       startIndex = endIndex - overlap;
       chunkIndex++;
@@ -141,17 +171,27 @@ class PromptChunkingService {
 
     // Split text into words
     const words = text.trim().split(/\s+/);
+    const totalWords = words.length;
 
-    if (words.length <= chunkSize) {
-      yield { text: text.trim(), index: 0 };
-      return;
+    // For short texts, still create multiple useful chunks instead of one big chunk
+    let effectiveChunkSize = chunkSize;
+    let effectiveOverlap = overlap;
+
+    if (totalWords <= chunkSize) {
+      // Aim for up to 3 chunks for short prompts, with no overlap
+      const targetChunks = Math.min(3, totalWords);
+      effectiveChunkSize = Math.max(
+        1,
+        Math.ceil(totalWords / targetChunks)
+      );
+      effectiveOverlap = 0; // "next words only" – no repetition
     }
 
     let startIndex = 0;
     let chunkIndex = 0;
 
-    while (startIndex < words.length) {
-      const endIndex = Math.min(startIndex + chunkSize, words.length);
+    while (startIndex < totalWords) {
+      const endIndex = Math.min(startIndex + effectiveChunkSize, totalWords);
       const chunkWords = words.slice(startIndex, endIndex);
       const chunkText = chunkWords.join(' ');
 
@@ -160,12 +200,17 @@ class PromptChunkingService {
         index: chunkIndex,
       };
 
+      // FIX: If we've reached the end of the text, stop
+      if (endIndex >= totalWords) {
+        break;
+      }
+
       // Move start index forward, accounting for overlap
-      startIndex = endIndex - overlap;
+      startIndex = endIndex - effectiveOverlap;
       chunkIndex++;
 
       // Prevent infinite loop if overlap is too large
-      if (overlap >= chunkSize) {
+      if (effectiveOverlap >= effectiveChunkSize) {
         break;
       }
     }

@@ -55,12 +55,10 @@ class AIConfigService {
     // Store prompt chunks in Supabase Vector DB if prompt is active and has content
     if (systemPromptActive && systemPrompt && systemPrompt.trim().length > 0) {
       try {
-        // Check if prompt is large enough to chunk (>500 words)
+        // Measure prompt size for logging/metadata
         const wordCount = systemPrompt.trim().split(/\s+/).length;
-        
-        if (wordCount > 500) {
-          console.log(`📦 Processing prompt for vector storage (${wordCount} words)...`);
-          
+        console.log(`📦 Processing prompt for vector storage (${wordCount} words)...`);
+
           // Store chunks in Supabase Vector DB
           const sourceId = aiConfig.id;
           
@@ -131,9 +129,6 @@ class AIConfigService {
           
           const storeDuration = Date.now() - storeStartTime;
           console.log(`✅ Prompt chunks stored in Supabase Vector DB (total: ${storeDuration}ms)`);
-        } else {
-          console.log(`ℹ️ Prompt too small (${wordCount} words), skipping vector storage`);
-        }
       } catch (error) {
         console.error('Error storing prompt chunks in Supabase:', error);
         // Don't fail the request if vector storage fails
