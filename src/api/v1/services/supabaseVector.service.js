@@ -29,9 +29,13 @@ class SupabaseVectorService {
    * @param {string} promptText - Full prompt text
    * @param {Object} metadata - Metadata to store with chunks
    * @param {string} sourceId - Optional source ID for tracking
+   * @param {Function} progressCallback - Optional callback for progress updates
    * @returns {Promise<Array>} Array of stored chunk IDs
    */
-  static async storePromptChunks(promptText, metadata = {}, sourceId = null) {
+  static async storePromptChunks(promptText, metadata = {}, sourceId = null, progressCallback = null) {
+    console.log(`[storePromptChunks] Starting for sourceId: ${sourceId}`);
+    
+    const storedCallback = progressCallback;
     this.initialize();
 
     if (!promptText || promptText.trim().length === 0) {
@@ -55,97 +59,253 @@ class SupabaseVectorService {
       if (error.message.includes('does not exist')) {
         throw error;
       }
-      // Other errors are fine, table might exist
+    }
+    
+    // Dynamic, meaningful chunk configuration
+    // Adjust chunk size based on prompt length so short prompts still get
+    // multiple useful chunks and huge prompts are capped.
+    const MAX_CHUNKS = 20000;     // Hard upper bound for safety
+    const MIN_CHUNK_SIZE = 400;   // Avoid ultra-tiny chunks
+    const MAX_CHUNK_SIZE = 2000;  // Avoid overly huge chunks
+
+    // Rough word count for the whole prompt
+    const totalWords = promptText.trim().split(/\s+/).length;
+
+    // Target chunks: aim for ~800 words per chunk, but respect MAX_CHUNKS
+    let targetChunks = Math.ceil(totalWords / 800);
+    if (targetChunks < 1) targetChunks = 1;
+    if (targetChunks > MAX_CHUNKS) targetChunks = MAX_CHUNKS;
+
+    // Derive effective chunk size from text length and targetChunks
+    let effectiveChunkSize = Math.ceil(totalWords / targetChunks);
+    if (effectiveChunkSize < MIN_CHUNK_SIZE) effectiveChunkSize = MIN_CHUNK_SIZE;
+    if (effectiveChunkSize > MAX_CHUNK_SIZE) effectiveChunkSize = MAX_CHUNK_SIZE;
+
+    // Final values used for chunking
+    const CHUNK_SIZE = effectiveChunkSize;
+    const CHUNK_OVERLAP = Math.round(CHUNK_SIZE * 0.15); // ~15% overlap
+
+    console.log(`[storePromptChunks] totalWords=${totalWords}, CHUNK_SIZE=${CHUNK_SIZE}, CHUNK_OVERLAP=${CHUNK_OVERLAP}`);
+
+    // Calculate total chunks
+    let totalChunks;
+    try {
+      totalChunks = PromptChunkingService.calculateChunkCount(promptText, CHUNK_SIZE, CHUNK_OVERLAP);
+    } catch (error) {
+      console.error(`[storePromptChunks] Error calculating chunk count:`, error);
+      throw error;
     }
 
-    // Process prompt in streaming fashion: chunk → embed → store → clear
-    // This prevents accumulating all embeddings in memory
-    const chunks = PromptChunkingService.splitIntoChunks(promptText, 1000, 200);
+    // Safety cap
+    if (totalChunks > MAX_CHUNKS) {
+      totalChunks = MAX_CHUNKS;
+    }
     
-    if (chunks.length === 0) {
+    if (totalChunks === 0) {
       throw new Error('No chunks generated from prompt');
     }
 
-    console.log(`📦 Split prompt into ${chunks.length} chunks`);
-    console.log(`🔄 Processing chunks incrementally (generate → store → clear)...`);
+    console.log(`[storePromptChunks] Will create ${totalChunks} chunks`);
+
+    const batchSize = totalChunks > 2000 ? 300 : totalChunks > 1000 ? 200 : 100;
+    const embeddingBatchSize = 1500;
+
+    // Notify progress
+    if (storedCallback) {
+      storedCallback({
+        status: 'chunking',
+        message: `Calculated ${totalChunks} chunks. Starting upload...`,
+        totalChunks,
+        processedChunks: 0,
+        progress: 0,
+        currentBatch: 0,
+        totalBatches: Math.ceil(totalChunks / batchSize),
+      });
+    }
 
     const insertedIds = [];
-    const totalChunks = chunks.length;
-    const processBatchSize = 2; // Process 2 chunks at a time: generate embedding → store → clear
+    let chunkIndex = 0;
+    const overallStartTime = Date.now();
+    
+    // Use streaming generator
+    const chunkGenerator = PromptChunkingService.splitIntoChunksStream(promptText, CHUNK_SIZE, CHUNK_OVERLAP);
+    promptText = null;
 
-    // Process chunks in small batches: generate embedding and store immediately
-    for (let i = 0; i < chunks.length; i += processBatchSize) {
-      const batch = chunks.slice(i, i + processBatchSize);
+    let batch = [];
+    let batchNumber = 0;
+    const totalBatches = Math.ceil(totalChunks / batchSize);
+    
+    for (const chunk of chunkGenerator) {
+      if (chunkIndex >= totalChunks) break;
+      batch.push(chunk);
       
-      try {
-        // Generate embeddings for this small batch only
-        const texts = batch.map(chunk => chunk.text);
-        console.log(`  Processing chunks ${i + 1}-${Math.min(i + processBatchSize, totalChunks)} of ${totalChunks}...`);
+      if (batch.length >= batchSize) {
+        batchNumber++;
+        await this.processBatch(batch, batchNumber, totalBatches, totalChunks, metadata, sourceId, embeddingBatchSize, insertedIds, chunkIndex, storedCallback);
+        chunkIndex += batch.length;
+        batch = [];
         
-        const embeddings = await PromptChunkingService.generateEmbeddingsBatch(texts, 'text-embedding-3-small', processBatchSize);
-        
-        // Clear texts immediately
-        texts.length = 0;
-
-        if (embeddings.length !== batch.length) {
-          throw new Error(`Mismatch: ${batch.length} chunks but ${embeddings.length} embeddings`);
-        }
-
-        // Prepare chunks for insertion (with embeddings)
-        const chunksToInsert = batch.map((chunk, idx) => ({
-          content: chunk.text,
-          chunk_index: chunk.index,
-          embedding: embeddings[idx],
-          metadata: {
-            ...metadata,
-            chunk_count: totalChunks,
-            created_at: new Date().toISOString(),
-          },
-          source_id: sourceId,
-          is_active: true,
-          usage_count: 0,
-        }));
-
-        // Store immediately
-        const { data, error } = await this.supabase
-          .from(this.tableName)
-          .insert(chunksToInsert)
-          .select('id');
-
-        if (error) {
-          console.error(`Error inserting chunks ${i + 1}-${i + batch.length}:`, error);
-          throw new Error(`Failed to store chunks: ${error.message}`);
-        }
-
-        if (data) {
-          insertedIds.push(...data.map(item => item.id));
-        }
-
-        // Clear everything from memory immediately
-        batch.length = 0;
-        embeddings.length = 0;
-        chunksToInsert.length = 0;
-        
-        // Force garbage collection if available
-        if (global.gc && i % 5 === 0) {
-          global.gc();
+        if (storedCallback) {
+          storedCallback({
+            status: 'uploading',
+            message: `Uploaded ${chunkIndex} of ${totalChunks} chunks...`,
+            totalChunks,
+            processedChunks: chunkIndex,
+            currentBatch: batchNumber,
+            totalBatches,
+            progress: Math.round((chunkIndex / totalChunks) * 100),
+          });
         }
         
-        // Small delay between batches
-        if (i + processBatchSize < chunks.length) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
-      } catch (error) {
-        console.error(`Error processing batch ${i + 1}-${i + batch.length}:`, error);
-        // Continue with next batch
+        if (global.gc && batchNumber % 10 === 0) global.gc();
+      }
+    }
+    
+    // Process remaining chunks
+    if (batch.length > 0) {
+      batchNumber++;
+      await this.processBatch(batch, batchNumber, totalBatches, totalChunks, metadata, sourceId, embeddingBatchSize, insertedIds, chunkIndex, storedCallback);
+      chunkIndex += batch.length;
+      batch = [];
+      
+      if (storedCallback) {
+        storedCallback({
+          status: 'uploading',
+          message: `Uploaded ${chunkIndex} of ${totalChunks} chunks...`,
+          totalChunks,
+          processedChunks: chunkIndex,
+          currentBatch: batchNumber,
+          totalBatches,
+          progress: Math.round((chunkIndex / totalChunks) * 100),
+        });
       }
     }
 
-    // Clear chunks array
-    chunks.length = 0;
+    // Completion
+    if (storedCallback) {
+      storedCallback({
+        status: 'completed',
+        message: `Successfully uploaded ${insertedIds.length} of ${totalChunks} chunks!`,
+        totalChunks,
+        processedChunks: insertedIds.length,
+        currentBatch: totalBatches,
+        totalBatches,
+        progress: 100,
+      });
+    }
 
-    console.log(`✅ Stored ${insertedIds.length} chunks in Supabase Vector DB`);
+    const overallDuration = Date.now() - overallStartTime;
+    console.log(`[storePromptChunks] Done: ${insertedIds.length}/${totalChunks} chunks in ${(overallDuration / 1000).toFixed(2)}s`);
     return insertedIds;
+  }
+
+  /**
+   * Process a batch of chunks: generate embeddings and insert into Supabase
+   * @private
+   */
+  static async processBatch(batch, batchNumber, totalBatches, totalChunks, metadata, sourceId, embeddingBatchSize, insertedIds, chunkIndex, progressCallback = null) {
+    console.log(`[processBatch] Batch ${batchNumber}/${totalBatches}: ${batch.length} chunks`);
+    
+    try {
+      const batchTexts = batch.map(chunk => chunk.text);
+      
+      // Generate embeddings
+      if (progressCallback) {
+        progressCallback({
+          status: 'generating_embeddings',
+          message: `Generating embeddings for batch ${batchNumber}/${totalBatches}...`,
+          totalChunks,
+          processedChunks: chunkIndex,
+          currentBatch: batchNumber,
+          totalBatches,
+          progress: Math.round((chunkIndex / totalChunks) * 100),
+        });
+      }
+      
+      const embeddings = await PromptChunkingService.generateEmbeddingsBatch(batchTexts, 'text-embedding-3-small', embeddingBatchSize);
+      
+      if (embeddings.length !== batch.length) {
+        throw new Error(`Mismatch: ${batch.length} chunks but ${embeddings.length} embeddings`);
+      }
+      
+      // Filter valid embeddings
+      const validChunks = [];
+      const validEmbeddings = [];
+      for (let idx = 0; idx < embeddings.length; idx++) {
+        if (embeddings[idx] !== null && embeddings[idx] !== undefined) {
+          validChunks.push(batch[idx]);
+          validEmbeddings.push(embeddings[idx]);
+        }
+      }
+      
+      if (validChunks.length === 0) {
+        throw new Error(`No valid embeddings generated for this batch`);
+      }
+      
+      // Prepare chunks for insert
+      const chunksToInsert = validChunks.map((chunk, idx) => ({
+        content: chunk.text,
+        chunk_index: chunk.index,
+        embedding: validEmbeddings[idx],
+        metadata: { ...metadata },
+        source_id: sourceId,
+        is_active: true,
+        usage_count: 0,
+      }));
+      
+      // ============================================================
+      // DEBUG: Log exactly what chunks are going into Supabase
+      // ============================================================
+      console.log(`\n[DEBUG] ========== CHUNKS GOING TO SUPABASE (Batch ${batchNumber}) ==========`);
+      chunksToInsert.forEach((c, i) => {
+        console.log(`[DEBUG] Chunk ${c.chunk_index}:`);
+        console.log(`        HEAD: "${c.content.slice(0, 100)}..."`);
+        console.log(`        TAIL: "...${c.content.slice(-100)}"`);
+        console.log(`        LENGTH: ${c.content.length} chars`);
+      });
+      console.log(`[DEBUG] ==============================================================\n`);
+      
+      // Insert into Supabase
+      if (progressCallback) {
+        progressCallback({
+          status: 'uploading',
+          message: `Uploading batch ${batchNumber}/${totalBatches} to database...`,
+          totalChunks,
+          processedChunks: chunkIndex,
+          currentBatch: batchNumber,
+          totalBatches,
+          progress: Math.round((chunkIndex / totalChunks) * 100),
+        });
+      }
+      
+      const { data, error } = await this.supabase
+        .from(this.tableName)
+        .insert(chunksToInsert)
+        .select('id');
+      
+      if (error) {
+        console.error(`[processBatch] Supabase insert error:`, error);
+        throw new Error(`Failed to store batch: ${error.message}`);
+      }
+      
+      if (data && data.length > 0) {
+        insertedIds.push(...data.map(item => item.id));
+        console.log(`[processBatch] Stored ${data.length} chunks`);
+      }
+      
+      // Clear batch from memory
+      batchTexts.length = 0;
+      embeddings.length = 0;
+      chunksToInsert.length = 0;
+      
+      // No delay - process batches as fast as possible
+    } catch (error) {
+      console.error(`\n  ❌ Error processing batch ${batchNumber}/${totalBatches}:`, error.message);
+      if (error.stack) {
+        console.error(`  Stack trace:`, error.stack);
+      }
+      // Don't throw - let caller continue with next batch
+    }
   }
 
   /**
@@ -278,8 +438,15 @@ class SupabaseVectorService {
     }
 
     try {
+      console.log('\n' + '🔍'.repeat(40));
+      console.log('🔍 VECTOR DB QUERY - Starting chunk retrieval...');
+      console.log('🔍'.repeat(40));
+      console.log(`📝 User Query: "${userQuery.substring(0, 100)}${userQuery.length > 100 ? '...' : ''}"`);
+      console.log(`⚙️  Settings: topK=${topK}, minSimilarity=${minSimilarity}`);
+
       // Generate embedding for user query
       const queryEmbedding = await this.generateEmbedding(userQuery);
+      console.log(`✅ Query embedding generated (${queryEmbedding.length} dimensions)`);
 
       // Find relevant chunks
       const chunks = await this.findRelevantChunks(queryEmbedding, {
@@ -289,8 +456,21 @@ class SupabaseVectorService {
       });
 
       if (!chunks || chunks.length === 0) {
+        console.log('⚠️  No relevant chunks found! Falling back to full prompt.');
+        console.log('🔍'.repeat(40) + '\n');
         return null;
       }
+
+      // DEBUG: Log each retrieved chunk
+      console.log(`\n✅ Found ${chunks.length} relevant chunks:`);
+      console.log('-'.repeat(60));
+      chunks.forEach((chunk, idx) => {
+        console.log(`\n📦 CHUNK ${idx + 1} (index: ${chunk.chunk_index || 'N/A'}):`);
+        console.log(`   Similarity: ${(chunk.similarity * 100).toFixed(1)}%`);
+        console.log(`   Content preview: "${chunk.content.substring(0, 150)}..."`);
+        console.log(`   Content length: ${chunk.content.length} chars`);
+      });
+      console.log('-'.repeat(60));
 
       // Update usage tracking for retrieved chunks
       await this.updateChunkUsage(chunks.map(chunk => chunk.id));
@@ -300,9 +480,12 @@ class SupabaseVectorService {
         .map((chunk) => chunk.content)
         .join('\n\n---\n\n');
 
+      console.log(`\n📊 Total context length: ${context.length} characters`);
+      console.log('🔍'.repeat(40) + '\n');
+
       return context;
     } catch (error) {
-      console.error('Error getting relevant prompt context:', error);
+      console.error('❌ Error getting relevant prompt context:', error);
       return null;
     }
   }
@@ -385,6 +568,36 @@ class SupabaseVectorService {
   }
 
   /**
+   * Get count of chunks for a specific source (for verification after deletion)
+   * @param {string} sourceId - Source ID to check
+   * @returns {Promise<number>} Number of chunks for this source
+   */
+  static async getChunkCountBySource(sourceId) {
+    if (!sourceId) {
+      return 0;
+    }
+
+    this.initialize();
+
+    try {
+      const { count, error } = await this.supabase
+        .from(this.tableName)
+        .select('*', { count: 'exact', head: true })
+        .eq('source_id', sourceId);
+
+      if (error) {
+        console.error(`Error getting chunk count for source ${sourceId}:`, error);
+        return 0;
+      }
+
+      return count || 0;
+    } catch (error) {
+      console.error(`Error getting chunk count for source ${sourceId}:`, error);
+      return 0;
+    }
+  }
+
+  /**
    * Archive old prompts (mark as inactive)
    * @param {number} daysOld - Archive prompts older than this many days
    * @returns {Promise<number>} Number of archived prompts
@@ -442,29 +655,41 @@ class SupabaseVectorService {
    * @returns {Promise<number>} Number of deleted chunks
    */
   static async deleteChunksBySource(sourceId) {
+    if (!sourceId) {
+      console.log(`    ⚠️  No sourceId provided, skipping deletion`);
+      return 0;
+    }
+
+    console.log(`    🔧 Initializing Supabase for deletion (sourceId: ${sourceId})...`);
     this.initialize();
+    console.log(`    ✅ Supabase initialized`);
 
     try {
+      console.log(`    🗑️  Deleting chunks from table '${this.tableName}' where source_id = ${sourceId}...`);
+      const deleteStartTime = Date.now();
       const { data, error } = await this.supabase
         .from(this.tableName)
         .delete()
         .eq('source_id', sourceId)
         .select('id');
+      const deleteDuration = Date.now() - deleteStartTime;
 
       if (error) {
         // If table doesn't exist, that's okay - just log and continue
         if (error.code === 'PGRST205') {
-          console.log(`ℹ️ Table '${this.tableName}' does not exist yet. Skipping deletion.`);
+          console.log(`    ℹ️ Table '${this.tableName}' does not exist yet. Skipping deletion.`);
           return 0;
         }
-        console.error('Error deleting chunks by source:', error);
+        console.error(`    ❌ Error deleting chunks by source:`, error);
         return 0;
       }
 
-      return data ? data.length : 0;
+      const deletedCount = data ? data.length : 0;
+      console.log(`    ✅ Deleted ${deletedCount} chunks (${deleteDuration}ms)`);
+      return deletedCount;
     } catch (error) {
       // Non-critical error - table might not exist yet
-      console.log(`ℹ️ Could not delete chunks by source (table may not exist): ${error.message}`);
+      console.log(`    ⚠️ Could not delete chunks by source (table may not exist): ${error.message}`);
       return 0;
     }
   }

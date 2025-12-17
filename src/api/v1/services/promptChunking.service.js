@@ -17,6 +17,95 @@ class PromptChunkingService {
   }
 
   /**
+   * Calculate the number of chunks without storing them (memory efficient)
+   * @param {string} text - The text to chunk
+   * @param {number} chunkSize - Number of words per chunk (default: 1000)
+   * @param {number} overlap - Number of words to overlap between chunks (default: 200)
+   * @returns {number} Number of chunks that would be created
+   */
+  static calculateChunkCount(text, chunkSize = 1000, overlap = 200) {
+    if (!text || typeof text !== 'string') {
+      return 0;
+    }
+
+    console.log(`      📏 Text length: ${text.length} chars`);
+    const startTime = Date.now();
+    
+    // For very large texts, use a more efficient approach
+    const trimmedText = text.trim();
+    const textLength = trimmedText.length;
+    
+    // Quick estimate: average word length is ~5 chars + 1 space = ~6 chars per word
+    // This avoids splitting the entire text for very large documents
+    const estimatedWordCount = Math.floor(textLength / 6);
+    
+    // If text is relatively short compared to the chunk size, we still want
+    // a small number of meaningful chunks instead of always returning 1.
+    if (estimatedWordCount <= chunkSize) {
+      const words = trimmedText.split(/\s+/);
+      const totalWords = words.length;
+
+      // Aim for up to 3 chunks for short prompts
+      const targetChunks = Math.min(3, totalWords);
+      const effectiveChunkSize = Math.max(
+        1,
+        Math.ceil(totalWords / targetChunks)
+      );
+
+      const duration = Date.now() - startTime;
+      const calculatedChunks = Math.ceil(totalWords / effectiveChunkSize);
+      console.log(
+        `      ✅ Short-text estimate: ${calculatedChunks} chunk(s) (${duration}ms)`
+      );
+      return calculatedChunks;
+    }
+
+    // For accurate count on larger texts, we need to split, but do it efficiently
+    console.log(
+      `      🔄 Splitting text into words (estimated ${estimatedWordCount} words)...`
+    );
+    const words = trimmedText.split(/\s+/);
+    const splitDuration = Date.now() - startTime;
+    console.log(
+      `      ✅ Split complete: ${words.length} words (${splitDuration}ms)`
+    );
+    
+    if (words.length <= chunkSize) {
+      return 1;
+    }
+
+    let count = 0;
+    let startIndex = 0;
+
+    while (startIndex < words.length) {
+      const endIndex = Math.min(startIndex + chunkSize, words.length);
+      count++;
+      
+      // FIX: If we've reached the end of the text, stop
+      if (endIndex >= words.length) {
+        break;
+      }
+      
+      startIndex = endIndex - overlap;
+      
+      // Prevent infinite loop if overlap >= chunkSize
+      if (overlap >= chunkSize) {
+        break;
+      }
+      
+      // Safety check
+      if (count > 100000) {
+        console.error(`      ⚠️  Safety break: chunk count exceeded 100,000`);
+        break;
+      }
+    }
+
+    const totalDuration = Date.now() - startTime;
+    console.log(`      ✅ Calculated ${count} chunks (total: ${totalDuration}ms)`);
+    return count;
+  }
+
+  /**
    * Split text into chunks with overlap
    * @param {string} text - The text to chunk
    * @param {number} chunkSize - Number of words per chunk (default: 1000)
@@ -50,6 +139,11 @@ class PromptChunkingService {
         index: chunkIndex,
       });
 
+      // FIX: If we've reached the end of the text, stop
+      if (endIndex >= words.length) {
+        break;
+      }
+
       // Move start index forward, accounting for overlap
       startIndex = endIndex - overlap;
       chunkIndex++;
@@ -61,6 +155,65 @@ class PromptChunkingService {
     }
 
     return chunks;
+  }
+
+  /**
+   * Generator function that yields chunks one at a time (memory efficient for large texts)
+   * @param {string} text - The text to chunk
+   * @param {number} chunkSize - Number of words per chunk (default: 1000)
+   * @param {number} overlap - Number of words to overlap between chunks (default: 200)
+   * @yields {Object} {text: string, index: number}
+   */
+  static *splitIntoChunksStream(text, chunkSize = 1000, overlap = 200) {
+    if (!text || typeof text !== 'string') {
+      return;
+    }
+
+    // Split text into words
+    const words = text.trim().split(/\s+/);
+    const totalWords = words.length;
+
+    // For short texts, still create multiple useful chunks instead of one big chunk
+    let effectiveChunkSize = chunkSize;
+    let effectiveOverlap = overlap;
+
+    if (totalWords <= chunkSize) {
+      // Aim for up to 3 chunks for short prompts, with no overlap
+      const targetChunks = Math.min(3, totalWords);
+      effectiveChunkSize = Math.max(
+        1,
+        Math.ceil(totalWords / targetChunks)
+      );
+      effectiveOverlap = 0; // "next words only" – no repetition
+    }
+
+    let startIndex = 0;
+    let chunkIndex = 0;
+
+    while (startIndex < totalWords) {
+      const endIndex = Math.min(startIndex + effectiveChunkSize, totalWords);
+      const chunkWords = words.slice(startIndex, endIndex);
+      const chunkText = chunkWords.join(' ');
+
+      yield {
+        text: chunkText.trim(),
+        index: chunkIndex,
+      };
+
+      // FIX: If we've reached the end of the text, stop
+      if (endIndex >= totalWords) {
+        break;
+      }
+
+      // Move start index forward, accounting for overlap
+      startIndex = endIndex - effectiveOverlap;
+      chunkIndex++;
+
+      // Prevent infinite loop if overlap is too large
+      if (effectiveOverlap >= effectiveChunkSize) {
+        break;
+      }
+    }
   }
 
   /**
@@ -77,18 +230,28 @@ class PromptChunkingService {
     const openai = this.initializeOpenAI();
 
     try {
+      const textLength = text.trim().length;
+      const wordCount = text.trim().split(/\s+/).length;
+      console.log(`    📤 Calling OpenAI API (${wordCount} words, ${textLength} chars)...`);
+      
+      const startTime = Date.now();
       const response = await openai.embeddings.create({
         model: model,
         input: text.trim(),
       });
+      const duration = Date.now() - startTime;
 
       if (!response.data || !response.data[0] || !response.data[0].embedding) {
         throw new Error('Invalid response from OpenAI embeddings API');
       }
 
+      console.log(`    ✅ Embedding received (${response.data[0].embedding.length} dimensions, ${duration}ms)`);
       return response.data[0].embedding;
     } catch (error) {
-      console.error('Error generating embedding:', error);
+      console.error('    ❌ Error generating embedding:', error.message);
+      if (error.status) {
+        console.error(`    Status: ${error.status}, Code: ${error.code}`);
+      }
       throw new Error(`Failed to generate embedding: ${error.message}`);
     }
   }
@@ -97,51 +260,60 @@ class PromptChunkingService {
    * Generate embeddings for multiple text chunks (batch processing)
    * @param {Array<string>} texts - Array of texts to generate embeddings for
    * @param {string} model - Embedding model to use
-   * @param {number} batchSize - Number of texts to process in each batch (default: 100)
+   * @param {number} batchSize - Number of texts to process in each batch (default: 500)
    * @returns {Promise<Array<number[]>>} Array of embedding arrays
    */
-  static async generateEmbeddingsBatch(texts, model = 'text-embedding-3-small', batchSize = 3) {
+  static async generateEmbeddingsBatch(texts, model = 'text-embedding-3-small', batchSize = 1500) {
     if (!Array.isArray(texts) || texts.length === 0) {
       return [];
     }
 
     const openai = this.initializeOpenAI();
     const embeddings = [];
+    const totalBatches = Math.ceil(texts.length / batchSize);
 
-    // Process in very small batches (3 at a time) to avoid memory issues
-    // Also add delay between batches to prevent rate limits
+    // Process in optimized batches (OpenAI supports up to 2048 inputs per request)
+    // Using 500 for safety while maximizing throughput
     for (let i = 0; i < texts.length; i += batchSize) {
       const batch = texts.slice(i, i + batchSize);
+      const currentBatch = Math.floor(i / batchSize) + 1;
       
       try {
-        console.log(`  Generating embeddings for batch ${i + 1}-${Math.min(i + batchSize, texts.length)} of ${texts.length}...`);
+        if (totalBatches > 1) {
+          console.log(`      🤖 OpenAI batch ${currentBatch}/${totalBatches}: ${batch.length} texts...`);
+        }
         
+        const batchStartTime = Date.now();
         const response = await openai.embeddings.create({
           model: model,
           input: batch,
         });
+        const batchDuration = Date.now() - batchStartTime;
 
         if (response.data) {
           const batchEmbeddings = response.data.map(item => item.embedding);
           embeddings.push(...batchEmbeddings);
+          
+          if (totalBatches > 1) {
+            console.log(`      ✅ Batch ${currentBatch}/${totalBatches} complete (${batchDuration}ms)`);
+          }
           
           // Clear response from memory immediately
           response.data = null;
           batch.length = 0;
         }
         
-        // Force garbage collection hint and delay between batches
-        if (global.gc) {
-          global.gc();
-        }
-        
-        // Small delay between batches to prevent rate limits and reduce memory pressure
-        if (i + batchSize < texts.length) {
-          await new Promise(resolve => setTimeout(resolve, 200));
-        }
+        // No delay - OpenAI can handle rapid requests efficiently
       } catch (error) {
-        console.error(`Error generating embeddings for batch ${i}-${i + batch.length}:`, error);
+        console.error(`      ❌ Error generating embeddings for batch ${currentBatch}/${totalBatches}:`, error.message);
+        if (error.status) {
+          console.error(`      Status: ${error.status}, Code: ${error.code}`);
+        }
         // Continue with next batch even if one fails
+        // Add null embeddings to maintain array length
+        for (let j = 0; j < batch.length; j++) {
+          embeddings.push(null);
+        }
       }
     }
 

@@ -594,17 +594,30 @@ class ChatService {
 
     // Try to get relevant prompt chunks from Supabase Vector DB
     let usingVectorDB = false;
+    console.log('\n' + '='.repeat(80));
+    console.log('🚀 SYSTEM PROMPT RESOLUTION - Starting...');
+    console.log('='.repeat(80));
+    console.log(`📋 AI Config exists: ${!!aiConfig}`);
+    console.log(`📋 systemPromptActive: ${aiConfig?.systemPromptActive}`);
+    console.log(`📋 systemPrompt exists: ${!!aiConfig?.systemPrompt}`);
+    console.log(`📋 User message: "${content?.substring(0, 50)}..."`);
+
     if (aiConfig?.systemPromptActive && aiConfig?.systemPrompt && content) {
       try {
         const SupabaseVectorService = require("./supabaseVector.service");
         const hasChunks = await SupabaseVectorService.hasChunks();
+        const chunkCount = await SupabaseVectorService.getChunkCount();
+        
+        console.log(`\n🗄️  Supabase Vector DB Check:`);
+        console.log(`   Has chunks: ${hasChunks}`);
+        console.log(`   Total active chunks: ${chunkCount}`);
         
         if (hasChunks) {
           // Get relevant context from Supabase Vector DB
           const relevantContext = await SupabaseVectorService.getRelevantPromptContext(
             content,
             3,    // topK: Get top 3 most relevant chunks
-            0.5   // minSimilarity: Minimum 50% similarity
+            0.3   // minSimilarity: Minimum 30% similarity (lowered for broader matching)
           );
 
           if (relevantContext) {
@@ -618,16 +631,27 @@ Use this context to provide accurate and helpful responses to the user's questio
             usingVectorDB = true;
             
             console.log("\n" + "=".repeat(80));
-            console.log("✅ USING SUPABASE VECTOR DB - RELEVANT CHUNKS RETRIEVED");
+            console.log("✅ SUCCESS: USING SUPABASE VECTOR DB CHUNKS!");
             console.log("=".repeat(80));
-            console.log(`Context length: ${relevantContext.length} characters`);
+            console.log(`📊 Context length: ${relevantContext.length} characters`);
+            console.log(`📊 Full prompt length would be: ${aiConfig.systemPrompt.length} characters`);
+            console.log(`📊 Savings: ${((1 - relevantContext.length / aiConfig.systemPrompt.length) * 100).toFixed(1)}% smaller`);
             console.log("=".repeat(80) + "\n");
+          } else {
+            console.log('\n⚠️  No relevant chunks returned - will use full prompt');
           }
+        } else {
+          console.log('\n⚠️  No chunks in Supabase - will use full prompt');
         }
       } catch (error) {
-        console.error('Error retrieving from Supabase Vector DB:', error);
+        console.error('❌ Error retrieving from Supabase Vector DB:', error);
         // Fall through to use full prompt
       }
+    } else {
+      console.log('\n⚠️  Conditions not met for vector DB:');
+      if (!aiConfig?.systemPromptActive) console.log('   - systemPromptActive is false');
+      if (!aiConfig?.systemPrompt) console.log('   - No system prompt configured');
+      if (!content) console.log('   - No user content provided');
     }
 
     // Fallback: Use full prompt if vector DB didn't work or isn't available
@@ -1659,33 +1683,29 @@ Use this context to provide accurate and helpful responses to the user's questio
     }
 
     if (normalized === "goals-achieved") {
-      const [messages, favorites] = await Promise.all([
-        prisma.message.findMany({
-          where: {
+      // Get only favorite messages
+      const favorites = await prisma.userMessageFavorite.findMany({
+        where: {
+          userId,
+          message: {
             chat: { userId, isDeleted: false },
             isDeleted: false,
             isFromAI: false,
             emotion: { not: null },
           },
-          include: {
-            chat: { select: { id: true, name: true, type: true } },
-          },
-          orderBy: { createdAt: "asc" },
-          take: 500,
-        }),
-        prisma.userMessageFavorite.findMany({
-          where: { userId },
-          include: {
-            message: {
-              include: {
-                chat: { select: { id: true, name: true, type: true } },
-              },
+        },
+        include: {
+          message: {
+            include: {
+              chat: { select: { id: true, name: true, type: true } },
             },
           },
-          orderBy: { createdAt: "desc" },
-          take: 100,
-        }),
-      ]);
+        },
+        orderBy: { createdAt: "desc" },
+        take: 500,
+      });
+
+      const messages = favorites.map((fav) => fav.message);
 
       const detectedGoals = deriveGoalsFromActivity(messages, favorites);
       const boundedGoals = detectedGoals.slice(0, Number(limit) || 20);
@@ -1724,20 +1744,30 @@ Use this context to provide accurate and helpful responses to the user's questio
     }
 
     if (normalized === "breakthrough-days") {
-      const rawMessages = await prisma.message.findMany({
+      // Get only favorite messages
+      const favoriteMessages = await prisma.userMessageFavorite.findMany({
         where: {
-          chat: { userId, isDeleted: false },
-          isDeleted: false,
-          isFromAI: false,
-          emotion: { not: null },
-          emotionConfidence: { gte: 0.7 },
+          userId,
+          message: {
+            chat: { userId, isDeleted: false },
+            isDeleted: false,
+            isFromAI: false,
+            emotion: { not: null },
+            emotionConfidence: { gte: 0.7 },
+          },
         },
         include: {
-          chat: { select: { id: true, name: true, type: true } },
+          message: {
+            include: {
+              chat: { select: { id: true, name: true, type: true } },
+            },
+          },
         },
         orderBy: { createdAt: "desc" },
         take: 700,
       });
+
+      const rawMessages = favoriteMessages.map((fav) => fav.message);
 
       const grouped = rawMessages.reduce((acc, msg) => {
         const key = toDateKey(msg.createdAt);
@@ -1824,23 +1854,49 @@ Use this context to provide accurate and helpful responses to the user's questio
     }
 
     const take = Math.min(Number(limit) || 20, 50);
-    const messages = await prisma.message.findMany({
+    
+    // Handle cursor pagination for favorite messages
+    let cursorFilter = {};
+    if (cursor) {
+      // Find the favorite record for the cursor message ID
+      const cursorFavorite = await prisma.userMessageFavorite.findUnique({
+        where: {
+          messageId_userId: {
+            messageId: cursor,
+            userId,
+          },
+        },
+      });
+      
+      if (cursorFavorite) {
+        cursorFilter = {
+          createdAt: { lt: cursorFavorite.createdAt },
+        };
+      }
+    }
+    
+    // Get only favorite messages
+    const favoriteMessages = await prisma.userMessageFavorite.findMany({
       where: {
-        ...filterConfig.where,
-        chat: { userId, isDeleted: false },
+        userId,
+        ...cursorFilter,
+        message: {
+          ...filterConfig.where,
+          chat: { userId, isDeleted: false },
+        },
       },
       include: {
-        chat: { select: { id: true, name: true, type: true } },
+        message: {
+          include: {
+            chat: { select: { id: true, name: true, type: true } },
+          },
+        },
       },
       orderBy: { createdAt: "desc" },
       take,
-      ...(cursor
-        ? {
-            skip: 1,
-            cursor: { id: cursor },
-          }
-        : {}),
     });
+    
+    const messages = favoriteMessages.map((fav) => fav.message);
 
     return {
       success: true,
@@ -2113,10 +2169,9 @@ Use this context to provide accurate and helpful responses to the user's questio
           return msgDate >= weekStart && msgDate <= weekEnd;
         });
 
-        const progress = Math.min(
-          100,
-          Math.floor((weekMsgs.length / 20) * 100)
-        );
+        // Calculate progress: 20 messages = 100%, capped at 100%
+        const rawProgress = (weekMsgs.length / 20) * 100;
+        const progress = Math.min(100, Math.max(0, Math.floor(rawProgress)));
 
         // Get dominant emotion
         const emotionCounts = {};
