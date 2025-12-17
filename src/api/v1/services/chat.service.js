@@ -2136,7 +2136,8 @@ Use this context to provide accurate and helpful responses to the user's questio
       const fourWeeksAgo = new Date(currentDate);
       fourWeeksAgo.setDate(currentDate.getDate() - 28);
 
-      const weeklyMessages = await prisma.message.findMany({
+      // First priority: messages WITH emotions
+      let weeklyMessages = await prisma.message.findMany({
         where: {
           chat: { userId, isDeleted: false },
           isDeleted: false,
@@ -2151,17 +2152,52 @@ Use this context to provide accurate and helpful responses to the user's questio
         },
       });
 
+      // Track if using emotional messages or fallback
+      let usingEmotionalMessages = weeklyMessages.length > 0;
+
+      // Fallback: if no emotional messages, get ALL user messages for progress
+      if (!usingEmotionalMessages) {
+        weeklyMessages = await prisma.message.findMany({
+          where: {
+            chat: { userId, isDeleted: false },
+            isDeleted: false,
+            isFromAI: false,
+            createdAt: { gte: fourWeeksAgo },
+          },
+          select: {
+            emotion: true,
+            emotionConfidence: true,
+            createdAt: true,
+          },
+        });
+      }
+
       // Process weekly data
+      // Week 1 = current week (includes today), Week 2-4 = previous weeks
       const weeklyJourneys = [];
       for (let i = 0; i < 4; i++) {
-        const weekEnd = new Date(currentDate);
-        const daysFromSunday = (currentDate.getDay() + 1) % 7;
-        weekEnd.setDate(currentDate.getDate() - i * 7 - daysFromSunday);
-        weekEnd.setHours(23, 59, 59, 999);
+        let weekStart, weekEnd;
+        
+        if (i === 0) {
+          // Current week: from last Sunday to TODAY
+          const daysSinceSunday = currentDate.getDay(); // 0=Sun, 1=Mon, etc.
+          weekStart = new Date(currentDate);
+          weekStart.setDate(currentDate.getDate() - daysSinceSunday);
+          weekStart.setHours(0, 0, 0, 0);
+          
+          weekEnd = new Date(currentDate);
+          weekEnd.setHours(23, 59, 59, 999);
+        } else {
+          // Previous complete weeks (Sun-Sat)
+          const daysSinceSunday = currentDate.getDay();
+          weekEnd = new Date(currentDate);
+          weekEnd.setDate(currentDate.getDate() - daysSinceSunday - (i - 1) * 7 - 1);
+          weekEnd.setHours(23, 59, 59, 999);
 
-        const weekStart = new Date(weekEnd);
-        weekStart.setDate(weekEnd.getDate() - 6);
-        weekStart.setHours(0, 0, 0, 0);
+          weekStart = new Date(weekEnd);
+          weekStart.setDate(weekEnd.getDate() - 6);
+          weekStart.setHours(0, 0, 0, 0);
+        }
 
         // Filter messages for this week
         const weekMsgs = weeklyMessages.filter((msg) => {
@@ -2169,9 +2205,23 @@ Use this context to provide accurate and helpful responses to the user's questio
           return msgDate >= weekStart && msgDate <= weekEnd;
         });
 
-        // Calculate progress: 20 messages = 100%, capped at 100%
-        const rawProgress = (weekMsgs.length / 20) * 100;
-        const progress = Math.min(100, Math.max(0, Math.floor(rawProgress)));
+        // Calculate progress based on message type:
+        // - WITH emotions: 20 messages = 100% (full credit)
+        // - WITHOUT emotions: 20 messages = 50% max (half credit - missing emotional data)
+        let rawProgress;
+        let maxProgress;
+        
+        if (usingEmotionalMessages) {
+          // Full credit for emotional messages
+          rawProgress = (weekMsgs.length / 20) * 100;
+          maxProgress = 100;
+        } else {
+          // Half credit for non-emotional messages (caps at 50%)
+          rawProgress = (weekMsgs.length / 20) * 50;
+          maxProgress = 50;
+        }
+        
+        const progress = Math.min(maxProgress, Math.max(0, Math.floor(rawProgress)));
 
         // Get dominant emotion
         const emotionCounts = {};
