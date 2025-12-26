@@ -592,6 +592,9 @@ class ChatService {
       select: { systemPrompt: true, systemPromptActive: true, id: true },
     });
 
+    // Safety flag to disable vector-based prompt replacement for stability
+    const DISABLE_VECTOR_RETRIEVAL = false;
+
     // Try to get relevant prompt chunks from Supabase Vector DB
     let usingVectorDB = false;
     console.log('\n' + '='.repeat(80));
@@ -601,8 +604,9 @@ class ChatService {
     console.log(`📋 systemPromptActive: ${aiConfig?.systemPromptActive}`);
     console.log(`📋 systemPrompt exists: ${!!aiConfig?.systemPrompt}`);
     console.log(`📋 User message: "${content?.substring(0, 50)}..."`);
+    console.log(`🔒 DISABLE_VECTOR_RETRIEVAL: ${DISABLE_VECTOR_RETRIEVAL}`);
 
-    if (aiConfig?.systemPromptActive && aiConfig?.systemPrompt && content) {
+    if (!DISABLE_VECTOR_RETRIEVAL && aiConfig?.systemPromptActive && aiConfig?.systemPrompt && content) {
       try {
         const SupabaseVectorService = require("./supabaseVector.service");
         const hasChunks = await SupabaseVectorService.hasChunks();
@@ -649,6 +653,7 @@ Use this context to provide accurate and helpful responses to the user's questio
       }
     } else {
       console.log('\n⚠️  Conditions not met for vector DB:');
+      if (DISABLE_VECTOR_RETRIEVAL) console.log('   - Vector retrieval is disabled by safety flag');
       if (!aiConfig?.systemPromptActive) console.log('   - systemPromptActive is false');
       if (!aiConfig?.systemPrompt) console.log('   - No system prompt configured');
       if (!content) console.log('   - No user content provided');
@@ -689,6 +694,30 @@ Use this context to provide accurate and helpful responses to the user's questio
         role: "system",
         content: systemPromptToUse,
       });
+    }
+
+    // Debug logging for prompt composition (gated by environment variable)
+    if (process.env.DEBUG_RAG_PROMPT === 'true') {
+      try {
+        const baseSystemPromptSource = aiConfig?.systemPrompt ? "ai-config" : 
+                                     chat.systemPrompt ? "chat-specific" : "none";
+        const baseSystemPromptLength = (aiConfig?.systemPrompt || chat.systemPrompt || "").length;
+        const finalSystemPromptLength = systemPromptToUse ? systemPromptToUse.length : 0;
+        
+        Logger.info("RAG Prompt Composition Debug", {
+          chatId,
+          userId,
+          vectorRetrievalUsed: usingVectorDB,
+          baseSystemPromptSource,
+          baseSystemPromptLength,
+          retrievalContextAppended: usingVectorDB,
+          finalSystemPromptLength,
+          DISABLE_VECTOR_RETRIEVAL,
+        });
+      } catch (debugError) {
+        // Non-blocking debug logging error
+        console.error("Debug logging error (non-critical):", debugError);
+      }
     }
 
     // Inject zodiac from user's birthday
@@ -1957,8 +1986,9 @@ Use this context to provide accurate and helpful responses to the user's questio
       const [
         // 1. Heart-to-hearts: Optimized query with aggregation
         heartToHeartsResult,
-        // 2. Growth Moments: Direct count
-        growthMoments,
+        // 2. Growth Moments: Direct count and detail list
+        growthMomentsCount,
+        growthMomentsList,
         // 3. Breakthrough Days: Optimized with date grouping
         breakthroughDaysData,
         // 4. Statistics
@@ -1977,6 +2007,9 @@ Use this context to provide accurate and helpful responses to the user's questio
           },
           select: {
             id: true,
+            name: true,
+            type: true,
+            updatedAt: true,
             _count: {
               select: {
                 messages: {
@@ -1992,7 +2025,7 @@ Use this context to provide accurate and helpful responses to the user's questio
           },
         }),
 
-        // Growth Moments
+        // Growth Moments - Count
         prisma.message.count({
           where: {
             chat: { userId, isDeleted: false },
@@ -2001,6 +2034,33 @@ Use this context to provide accurate and helpful responses to the user's questio
             emotion: { in: ["joy", "surprise"] },
             emotionConfidence: { gte: 0.7 },
           },
+        }),
+
+        // Growth Moments - Detail List
+        prisma.message.findMany({
+          where: {
+            chat: { userId, isDeleted: false },
+            isDeleted: false,
+            isFromAI: false,
+            emotion: { in: ["joy", "surprise"] },
+            emotionConfidence: { gte: 0.7 },
+          },
+          select: {
+            id: true,
+            content: true,
+            emotion: true,
+            emotionConfidence: true,
+            createdAt: true,
+            chat: {
+              select: {
+                id: true,
+                name: true,
+                type: true,
+              },
+            },
+          },
+          orderBy: { createdAt: "desc" },
+          take: messageLimit,
         }),
 
         // Breakthrough Days: Get messages grouped by date
@@ -2100,9 +2160,35 @@ Use this context to provide accurate and helpful responses to the user's questio
       );
 
       // Process heart-to-hearts
-      const heartToHearts = heartToHeartsResult.filter(
+      const heartToHeartsQualified = heartToHeartsResult.filter(
         (chat) => chat._count.messages >= 3
-      ).length;
+      );
+      const heartToHearts = heartToHeartsQualified.length;
+
+      // Create heart-to-hearts detail list
+      const heartToHeartsList = heartToHeartsQualified
+        .slice(0, chatLimit)
+        .map((chat) => ({
+          chatId: chat.id,
+          chatName: chat.name,
+          chatType: chat.type,
+          emotionalMessageCount: chat._count.messages,
+          lastUpdatedAt: chat.lastUpdatedAt,
+        }));
+
+      // Process growth moments - keep existing count, add detail list
+      const growthMomentsDetailList = (growthMomentsList || []).map((msg) => ({
+        id: msg.id,
+        content: msg.content,
+        emotion: msg.emotion,
+        emotionConfidence: msg.emotionConfidence,
+        createdAt: msg.createdAt,
+        chat: {
+          id: msg.chat.id,
+          name: msg.chat.name,
+          type: msg.chat.type,
+        },
+      }));
 
       // Process breakthrough days (group by date)
       const dailyEmotions = {};
@@ -2501,8 +2587,14 @@ Use this context to provide accurate and helpful responses to the user's questio
         data: {
           user,
           journeyOverview: {
-            heartToHearts,
-            growthMoments,
+            heartToHearts: {
+              count: heartToHearts,
+              items: heartToHeartsList,
+            },
+            growthMoments: {
+              count: growthMomentsCount || 0,
+              items: growthMomentsDetailList || [],
+            },
             breakthroughDays,
             goalsAchieved,
           },
@@ -2532,8 +2624,8 @@ Use this context to provide accurate and helpful responses to the user's questio
             totalMessages,
             totalFavorites,
             totalMedia,
-            heartToHearts,
-            growthMoments,
+            heartToHearts: heartToHearts,
+            growthMoments: growthMomentsCount || 0,
             breakthroughDays,
             goalsAchieved,
           },
