@@ -1983,22 +1983,26 @@ Use this context to provide accurate and helpful responses to the user's questio
       }
 
       // Calculate all metrics in parallel
-      const [
-        // 1. Heart-to-hearts: Optimized query with aggregation
-        heartToHeartsResult,
-        // 2. Growth Moments: Direct count and detail list
-        growthMomentsCount,
-        growthMomentsList,
-        // 3. Breakthrough Days: Optimized with date grouping
-        breakthroughDaysData,
-        // 4. Statistics
-        totalChats,
-        totalMessages,
-        totalFavorites,
-        totalMedia,
-        // 5. Favorite messages for vault
-        favoriteMessages,
-      ] = await Promise.all([
+      let heartToHeartsResult, growthMomentsCount, growthMomentsList, breakthroughDaysData;
+      let totalChats, totalMessages, totalFavorites, totalMedia, favoriteMessages;
+      
+      try {
+        [
+          // 1. Heart-to-hearts: Optimized query with aggregation
+          heartToHeartsResult,
+          // 2. Growth Moments: Direct count and detail list
+          growthMomentsCount,
+          growthMomentsList,
+          // 3. Breakthrough Days: Optimized with date grouping
+          breakthroughDaysData,
+          // 4. Statistics
+          totalChats,
+          totalMessages,
+          totalFavorites,
+          totalMedia,
+          // 5. Favorite messages for vault
+          favoriteMessages,
+        ] = await Promise.all([
         // Heart-to-hearts: Count chats with >= 3 emotional messages
         prisma.chat.findMany({
           where: {
@@ -2125,6 +2129,30 @@ Use this context to provide accurate and helpful responses to the user's questio
           },
         }),
       ]);
+      } catch (promiseError) {
+        console.error("Error in Promise.all execution:", promiseError);
+        // Set default values if Promise.all fails
+        heartToHeartsResult = [];
+        growthMomentsCount = 0;
+        growthMomentsList = [];
+        breakthroughDaysData = [];
+        totalChats = 0;
+        totalMessages = 0;
+        totalFavorites = 0;
+        totalMedia = 0;
+        favoriteMessages = [];
+      }
+
+      // Ensure all variables are defined with fallbacks
+      heartToHeartsResult = heartToHeartsResult || [];
+      growthMomentsCount = growthMomentsCount || 0;
+      growthMomentsList = growthMomentsList || [];
+      breakthroughDaysData = breakthroughDaysData || [];
+      totalChats = totalChats || 0;
+      totalMessages = totalMessages || 0;
+      totalFavorites = totalFavorites || 0;
+      totalMedia = totalMedia || 0;
+      favoriteMessages = favoriteMessages || [];
 
       const [messagesForGoals, favoritesForGoals] = await Promise.all([
         prisma.message.findMany({
@@ -2173,11 +2201,12 @@ Use this context to provide accurate and helpful responses to the user's questio
           chatName: chat.name,
           chatType: chat.type,
           emotionalMessageCount: chat._count.messages,
-          lastUpdatedAt: chat.lastUpdatedAt,
+          lastUpdatedAt: chat.updatedAt,
         }));
 
       // Process growth moments - keep existing count, add detail list
-      const growthMomentsDetailList = (growthMomentsList || []).map((msg) => ({
+      const growthMomentsDetailList = Array.isArray(growthMomentsList) 
+        ? growthMomentsList.map((msg) => ({
         id: msg.id,
         content: msg.content,
         emotion: msg.emotion,
@@ -2188,6 +2217,10 @@ Use this context to provide accurate and helpful responses to the user's questio
           name: msg.chat.name,
           type: msg.chat.type,
         },
+      }))
+        : [];
+
+      // Breakthrough Days: Process the data
       }));
 
       // Process breakthrough days (group by date)
