@@ -2220,9 +2220,6 @@ Use this context to provide accurate and helpful responses to the user's questio
       }))
         : [];
 
-      // Breakthrough Days: Process the data
-      }));
-
       // Process breakthrough days (group by date)
       const dailyEmotions = {};
       breakthroughDaysData.forEach((msg) => {
