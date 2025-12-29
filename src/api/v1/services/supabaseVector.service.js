@@ -16,6 +16,32 @@ class SupabaseVectorService {
   }
 
   /**
+   * Deterministic sorting for retrieved chunks to ensure stable prompt assembly
+   * @param {Array} chunks - Array of chunks to sort
+   * @returns {Array} Sorted chunks
+   */
+  static deterministicSort(chunks = []) {
+    return chunks.sort((a, b) => {
+      // 1. Primary: similarity (desc) - most relevant first
+      if (b.similarity !== a.similarity) {
+        return b.similarity - a.similarity;
+      }
+      
+      // 2. Secondary: created_at (desc) - newer chunks preferred when similarity ties
+      const aDate = new Date(a.created_at || 0);
+      const bDate = new Date(b.created_at || 0);
+      if (bDate.getTime() !== aDate.getTime()) {
+        return bDate.getTime() - aDate.getTime();
+      }
+      
+      // 3. Final: id (asc) - stable tie-break to guarantee deterministic order
+      const aId = a.id || '';
+      const bId = b.id || '';
+      return aId.localeCompare(bId);
+    });
+  }
+
+  /**
    * Generate embedding for user query
    * @param {string} text - User query text
    * @returns {Promise<number[]>} Embedding vector
@@ -312,9 +338,10 @@ class SupabaseVectorService {
    * Find relevant chunks using vector similarity search
    * @param {number[]} queryEmbedding - Query embedding vector
    * @param {Object} options - Search options
+   * @param {string} promptSource - Optional prompt source/version for filtering
    * @returns {Promise<Array>} Array of relevant chunks with similarity scores
    */
-  static async findRelevantChunks(queryEmbedding, options = {}) {
+  static async findRelevantChunks(queryEmbedding, options = {}, promptSource = null) {
     this.initialize();
 
     const {
@@ -341,20 +368,31 @@ class SupabaseVectorService {
       if (error) {
         console.error('Error in vector similarity search:', error);
         // Fallback to direct query if RPC function doesn't exist
-        return await this.findRelevantChunksFallback(queryEmbedding, options);
+        return await this.findRelevantChunksFallback(queryEmbedding, options, promptSource);
       }
 
-      return data || [];
+      let results = data || [];
+      
+      // Apply prompt source/version filtering if specified
+      if (promptSource) {
+        results = results.filter(chunk => 
+          chunk.metadata?.promptSource === promptSource
+        );
+      }
+
+      // Apply deterministic sorting and limit results
+      const sorted = this.deterministicSort(results);
+      return sorted.slice(0, topK);
     } catch (error) {
       console.error('Error finding relevant chunks:', error);
-      return await this.findRelevantChunksFallback(queryEmbedding, options);
+      return await this.findRelevantChunksFallback(queryEmbedding, options, promptSource);
     }
   }
 
   /**
    * Fallback method using direct SQL query (if RPC function not available)
    */
-  static async findRelevantChunksFallback(queryEmbedding, options = {}) {
+  static async findRelevantChunksFallback(queryEmbedding, options = {}, promptSource = null) {
     const {
       topK = 3,
       minSimilarity = 0.5,
@@ -381,7 +419,7 @@ class SupabaseVectorService {
     }
 
     // Calculate similarity manually (cosine similarity)
-    const results = data.map((chunk) => {
+    let results = data.map((chunk) => {
       // Note: This requires embedding to be stored as array
       // For production, use the RPC function which handles vector operations
       const similarity = this.calculateCosineSimilarity(queryEmbedding, chunk.embedding || []);
@@ -390,11 +428,18 @@ class SupabaseVectorService {
         similarity,
       };
     })
-    .filter((chunk) => chunk.similarity >= minSimilarity)
-    .sort((a, b) => b.similarity - a.similarity)
-    .slice(0, topK);
+    .filter((chunk) => chunk.similarity >= minSimilarity);
 
-    return results;
+    // Apply prompt source/version filtering if specified
+    if (promptSource) {
+      results = results.filter(chunk => 
+        chunk.metadata?.promptSource === promptSource
+      );
+    }
+
+    // Apply deterministic sorting and limit results
+    const sorted = this.deterministicSort(results);
+    return sorted.slice(0, topK);
   }
 
   /**
@@ -430,9 +475,10 @@ class SupabaseVectorService {
    * @param {string} userQuery - User's query text
    * @param {number} topK - Number of chunks to retrieve
    * @param {number} minSimilarity - Minimum similarity threshold
+   * @param {string} promptSource - Optional prompt source/version for filtering
    * @returns {Promise<string|null>} Combined context string or null
    */
-  static async getRelevantPromptContext(userQuery, topK = 3, minSimilarity = 0.5) {
+  static async getRelevantPromptContext(userQuery, topK = 3, minSimilarity = 0.5, promptSource = null) {
     if (!userQuery || userQuery.trim().length === 0) {
       return null;
     }
@@ -443,17 +489,20 @@ class SupabaseVectorService {
       console.log('🔍'.repeat(40));
       console.log(`📝 User Query: "${userQuery.substring(0, 100)}${userQuery.length > 100 ? '...' : ''}"`);
       console.log(`⚙️  Settings: topK=${topK}, minSimilarity=${minSimilarity}`);
+      if (promptSource) {
+        console.log(`🏷️  Prompt Source Filter: ${promptSource}`);
+      }
 
       // Generate embedding for user query
       const queryEmbedding = await this.generateEmbedding(userQuery);
       console.log(`✅ Query embedding generated (${queryEmbedding.length} dimensions)`);
 
-      // Find relevant chunks
+      // Find relevant chunks with optional prompt source filtering
       const chunks = await this.findRelevantChunks(queryEmbedding, {
         topK,
         minSimilarity,
         onlyRecent: true,
-      });
+      }, promptSource);
 
       if (!chunks || chunks.length === 0) {
         console.log('⚠️  No relevant chunks found! Falling back to full prompt.');
@@ -461,16 +510,38 @@ class SupabaseVectorService {
         return null;
       }
 
-      // DEBUG: Log each retrieved chunk
-      console.log(`\n✅ Found ${chunks.length} relevant chunks:`);
-      console.log('-'.repeat(60));
-      chunks.forEach((chunk, idx) => {
-        console.log(`\n📦 CHUNK ${idx + 1} (index: ${chunk.chunk_index || 'N/A'}):`);
-        console.log(`   Similarity: ${(chunk.similarity * 100).toFixed(1)}%`);
-        console.log(`   Content preview: "${chunk.content.substring(0, 150)}..."`);
-        console.log(`   Content length: ${chunk.content.length} chars`);
-      });
-      console.log('-'.repeat(60));
+      // Debug logging for retrieval (gated by environment variable)
+      if (process.env.DEBUG_RAG_RETRIEVAL === 'true') {
+        try {
+          console.log(`\n✅ Found ${chunks.length} relevant chunks:`);
+          console.log('-'.repeat(60));
+          chunks.forEach((chunk, idx) => {
+            console.log(`\n📦 CHUNK ${idx + 1} (index: ${chunk.chunk_index || 'N/A'}):`);
+            console.log(`   ID: ${chunk.id}`);
+            console.log(`   Similarity: ${(chunk.similarity * 100).toFixed(1)}%`);
+            console.log(`   Prompt Source: ${chunk.metadata?.promptSource || 'N/A'}`);
+            console.log(`   Created: ${chunk.created_at || 'N/A'}`);
+            console.log(`   Content preview: "${chunk.content.substring(0, 150)}..."`);
+            console.log(`   Content length: ${chunk.content.length} chars`);
+          });
+          console.log('-'.repeat(60));
+          console.log(`📊 Deterministic ordering confirmed: similarity → created_at → id`);
+        } catch (debugError) {
+          // Non-blocking debug logging error
+          console.error("Debug logging error (non-critical):", debugError);
+        }
+      } else {
+        // Standard logging
+        console.log(`\n✅ Found ${chunks.length} relevant chunks:`);
+        console.log('-'.repeat(60));
+        chunks.forEach((chunk, idx) => {
+          console.log(`\n📦 CHUNK ${idx + 1} (index: ${chunk.chunk_index || 'N/A'}):`);
+          console.log(`   Similarity: ${(chunk.similarity * 100).toFixed(1)}%`);
+          console.log(`   Content preview: "${chunk.content.substring(0, 150)}..."`);
+          console.log(`   Content length: ${chunk.content.length} chars`);
+        });
+        console.log('-'.repeat(60));
+      }
 
       // Update usage tracking for retrieved chunks
       await this.updateChunkUsage(chunks.map(chunk => chunk.id));
