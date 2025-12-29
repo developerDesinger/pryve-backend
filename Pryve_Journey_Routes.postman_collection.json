@@ -1,0 +1,215 @@
+{
+  "info": {
+    "name": "Pryve - Journey Routes",
+    "description": "Postman collection for Journey API endpoints - user journey data and messages",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "pryve-api"
+  },
+  "item": [
+    {
+      "name": "Get Journey Page Data (Default)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/journey",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "journey"]
+        },
+        "description": "Get journey page data with default limits. Returns user profile, favorite messages, recent chats, recent messages, and statistics."
+      },
+      "response": [
+        {
+          "name": "Success Response",
+          "originalRequest": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/journey",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "journey"]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [],
+          "cookie": [],
+          "body": "{\n  \"message\": \"Journey page data fetched successfully.\",\n  \"success\": true,\n  \"data\": {\n    \"user\": {\n      \"id\": \"user123\",\n      \"fullName\": \"John Doe\",\n      \"email\": \"john@example.com\",\n      \"profilePhoto\": \"https://...\",\n      \"userName\": \"johndoe\",\n      \"bio\": \"I love using AI!\",\n      \"createdAt\": \"2024-01-01T00:00:00Z\"\n    },\n    \"favoriteMessages\": [],\n    \"recentChats\": [],\n    \"recentMessages\": [],\n    \"statistics\": {\n      \"totalChats\": 0,\n      \"totalMessages\": 0,\n      \"totalFavorites\": 0,\n      \"totalMedia\": 0\n    }\n  }\n}"
+        }
+      ]
+    },
+    {
+      "name": "Get Journey Page Data (Custom Limits)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/journey?favoriteLimit=20&chatLimit=10&messageLimit=20",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "journey"],
+          "query": [
+            {
+              "key": "favoriteLimit",
+              "value": "20",
+              "description": "Number of favorite messages to return (default: 10)"
+            },
+            {
+              "key": "chatLimit",
+              "value": "10",
+              "description": "Number of recent chats to return (default: 5)"
+            },
+            {
+              "key": "messageLimit",
+              "value": "20",
+              "description": "Number of recent messages to return (default: 10)"
+            }
+          ]
+        },
+        "description": "Get journey page data with custom limits for favorites, chats, and messages."
+      },
+      "response": []
+    },
+    {
+      "name": "Get Journey Messages - Goals Achieved",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/journey/messages?category=goals-achieved",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "journey", "messages"],
+          "query": [
+            {
+              "key": "category",
+              "value": "goals-achieved",
+              "description": "Category of journey messages to fetch"
+            }
+          ]
+        },
+        "description": "Get journey feed messages filtered by category (goals-achieved)."
+      },
+      "response": []
+    },
+    {
+      "name": "Get Journey Messages - All Categories",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/journey/messages",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "journey", "messages"]
+        },
+        "description": "Get all journey feed messages without category filter."
+      },
+      "response": []
+    },
+    {
+      "name": "Get Journey Messages - With Pagination",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/journey/messages?page=1&limit=20&category=goals-achieved",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "journey", "messages"],
+          "query": [
+            {
+              "key": "page",
+              "value": "1",
+              "description": "Page number for pagination (default: 1)"
+            },
+            {
+              "key": "limit",
+              "value": "20",
+              "description": "Number of messages per page (default: 20)"
+            },
+            {
+              "key": "category",
+              "value": "goals-achieved",
+              "description": "Category filter (optional)"
+            }
+          ]
+        },
+        "description": "Get journey messages with pagination and category filter."
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3400",
+      "type": "string",
+      "description": "Base URL for the API server"
+    },
+    {
+      "key": "token",
+      "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImNtZ2dxbmx2ajAwMDB1amRnZWJxdGR6dnYiLCJyb2xlIjoiQ0xJRU5UIiwiaWF0IjoxNzY2NjUwOTIwLCJleHAiOjE3NjcyNTU3MjB9.qK_sk_MDN6WbX7klt-cNv2tAD32TdMu2W9ILIVrIknM",
+      "type": "string",
+      "description": "JWT Bearer token for authentication (from test file)"
+    }
+  ]
+}
