@@ -1699,6 +1699,8 @@ Use this context to provide accurate and helpful responses to the user's questio
   /**
    * Get journey feed messages by category
    * GET /api/v1/journey/messages
+   * 
+   * UPDATED: Now uses same logic as statistics endpoint for consistency
    */
   static async getJourneyMessages(userId, query = {}) {
     const { category, limit = 20, cursor } = query;
@@ -1712,17 +1714,24 @@ Use this context to provide accurate and helpful responses to the user's questio
     }
 
     if (normalized === "goals-achieved") {
-      // Get only favorite messages
-      const favorites = await prisma.userMessageFavorite.findMany({
+      // UPDATED: Use same logic as statistics - get ALL emotional messages, not just favorites
+      const emotionalMessages = await prisma.message.findMany({
         where: {
-          userId,
-          message: {
-            chat: { userId, isDeleted: false },
-            isDeleted: false,
-            isFromAI: false,
-            emotion: { not: null },
-          },
+          chat: { userId, isDeleted: false },
+          isDeleted: false,
+          isFromAI: false,
+          emotion: { not: null },
         },
+        include: {
+          chat: { select: { id: true, name: true, type: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 500,
+      });
+
+      // Get favorites for goal derivation (still needed for the algorithm)
+      const favorites = await prisma.userMessageFavorite.findMany({
+        where: { userId },
         include: {
           message: {
             include: {
@@ -1731,12 +1740,10 @@ Use this context to provide accurate and helpful responses to the user's questio
           },
         },
         orderBy: { createdAt: "desc" },
-        take: 500,
+        take: 100,
       });
 
-      const messages = favorites.map((fav) => fav.message);
-
-      const detectedGoals = deriveGoalsFromActivity(messages, favorites);
+      const detectedGoals = deriveGoalsFromActivity(emotionalMessages, favorites);
       const boundedGoals = detectedGoals.slice(0, Number(limit) || 20);
 
       return {
@@ -1772,31 +1779,137 @@ Use this context to provide accurate and helpful responses to the user's questio
       };
     }
 
-    if (normalized === "breakthrough-days") {
-      // Get only favorite messages
-      const favoriteMessages = await prisma.userMessageFavorite.findMany({
+    if (normalized === "growth-moments") {
+      // UPDATED: Use EXACT same logic as statistics endpoint
+      const growthMessages = await prisma.message.findMany({
         where: {
-          userId,
-          message: {
-            chat: { userId, isDeleted: false },
-            isDeleted: false,
-            isFromAI: false,
-            emotion: { not: null },
-            emotionConfidence: { gte: 0.7 },
-          },
+          chat: { userId, isDeleted: false },
+          isDeleted: false,
+          isFromAI: false,
+          emotion: { in: ["joy", "surprise"] },
+          emotionConfidence: { gte: 0.7 },
         },
         include: {
-          message: {
-            include: {
-              chat: { select: { id: true, name: true, type: true } },
-            },
-          },
+          chat: { select: { id: true, name: true, type: true } },
         },
         orderBy: { createdAt: "desc" },
-        take: 700,
+        take: Number(limit) || 20,
       });
 
-      const rawMessages = favoriteMessages.map((fav) => fav.message);
+      return {
+        success: true,
+        data: {
+          category: normalized,
+          items: growthMessages.map((msg) => ({
+            id: msg.id,
+            title: msg.content,
+            primaryTag: mapEmotionToTag(msg.emotion, msg.emotionConfidence),
+            tags: buildSecondaryTags(msg),
+            source: mapChatTypeToSource(msg.chat?.type),
+            timestamp: msg.createdAt,
+            emotion: {
+              label: msg.emotion,
+              confidence: msg.emotionConfidence,
+            },
+            chat: {
+              id: msg.chat?.id,
+              name: msg.chat?.name,
+            },
+          })),
+          nextCursor: null,
+        },
+      };
+    }
+
+    if (normalized === "heart-to-hearts") {
+      // UPDATED: Use same logic as statistics - get messages from chats with >= 3 emotional messages
+      const chatsWithEmotionalMessages = await prisma.chat.findMany({
+        where: {
+          userId,
+          isDeleted: false,
+        },
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          messages: {
+            where: {
+              isDeleted: false,
+              isFromAI: false,
+              emotion: { not: null },
+              emotionConfidence: { gte: 0.6 },
+            },
+            select: {
+              id: true,
+              content: true,
+              emotion: true,
+              emotionConfidence: true,
+              createdAt: true,
+            },
+            orderBy: { createdAt: "desc" },
+          },
+        },
+      });
+
+      // Filter chats with >= 3 emotional messages (same as statistics logic)
+      const qualifiedChats = chatsWithEmotionalMessages.filter(
+        (chat) => chat.messages.length >= 3
+      );
+
+      // Get messages from qualified chats
+      const heartToHeartMessages = qualifiedChats
+        .flatMap((chat) => 
+          chat.messages.map((msg) => ({
+            ...msg,
+            chat: { id: chat.id, name: chat.name, type: chat.type }
+          }))
+        )
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        .slice(0, Number(limit) || 20);
+
+      return {
+        success: true,
+        data: {
+          category: normalized,
+          items: heartToHeartMessages.map((msg) => ({
+            id: msg.id,
+            title: msg.content,
+            primaryTag: mapEmotionToTag(msg.emotion, msg.emotionConfidence),
+            tags: buildSecondaryTags(msg),
+            source: mapChatTypeToSource(msg.chat?.type),
+            timestamp: msg.createdAt,
+            emotion: {
+              label: msg.emotion,
+              confidence: msg.emotionConfidence,
+            },
+            chat: {
+              id: msg.chat?.id,
+              name: msg.chat?.name,
+            },
+          })),
+          nextCursor: null,
+        },
+      };
+    }
+
+    if (normalized === "breakthrough-days") {
+      // UPDATED: Use same logic as statistics - get ALL emotional messages with confidence >= 0.7
+      const emotionalMessages = await prisma.message.findMany({
+        where: {
+          chat: { userId, isDeleted: false },
+          isDeleted: false,
+          isFromAI: false,
+          emotion: { not: null },
+          emotionConfidence: { gte: 0.7 },
+        },
+        include: {
+          chat: { select: { id: true, name: true, type: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 1000, // Same as statistics logic
+      });
+
+      const rawMessages = emotionalMessages;
 
       const grouped = rawMessages.reduce((acc, msg) => {
         const key = toDateKey(msg.createdAt);
@@ -1873,6 +1986,8 @@ Use this context to provide accurate and helpful responses to the user's questio
       };
     }
 
+    // UPDATED: For any other categories, use ALL emotional messages (same as statistics logic)
+    // instead of only favorites
     const filterConfig = JOURNEY_CATEGORY_FILTERS[normalized];
 
     if (!filterConfig) {
@@ -1884,48 +1999,36 @@ Use this context to provide accurate and helpful responses to the user's questio
 
     const take = Math.min(Number(limit) || 20, 50);
     
-    // Handle cursor pagination for favorite messages
+    // Handle cursor pagination for messages
     let cursorFilter = {};
     if (cursor) {
-      // Find the favorite record for the cursor message ID
-      const cursorFavorite = await prisma.userMessageFavorite.findUnique({
-        where: {
-          messageId_userId: {
-            messageId: cursor,
-            userId,
-          },
-        },
+      const cursorMessage = await prisma.message.findUnique({
+        where: { id: cursor },
       });
       
-      if (cursorFavorite) {
+      if (cursorMessage) {
         cursorFilter = {
-          createdAt: { lt: cursorFavorite.createdAt },
+          createdAt: { lt: cursorMessage.createdAt },
         };
       }
     }
     
-    // Get only favorite messages
-    const favoriteMessages = await prisma.userMessageFavorite.findMany({
+    // UPDATED: Get ALL emotional messages, not just favorites
+    const messages = await prisma.message.findMany({
       where: {
-        userId,
+        chat: { userId, isDeleted: false },
+        isDeleted: false,
+        isFromAI: false,
+        emotion: { not: null },
         ...cursorFilter,
-        message: {
-          ...filterConfig.where,
-          chat: { userId, isDeleted: false },
-        },
+        ...filterConfig.where,
       },
       include: {
-        message: {
-          include: {
-            chat: { select: { id: true, name: true, type: true } },
-          },
-        },
+        chat: { select: { id: true, name: true, type: true } },
       },
       orderBy: { createdAt: "desc" },
       take,
     });
-    
-    const messages = favoriteMessages.map((fav) => fav.message);
 
     return {
       success: true,
