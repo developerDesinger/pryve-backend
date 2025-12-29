@@ -12,3 +12,5 @@ router.patch("/", isAuthenticated, AIConfigController.updateAIConfig);
 router.delete("/", isAuthenticated, AIConfigController.deleteAIConfig);
 
 module.exports = router;
+
+
