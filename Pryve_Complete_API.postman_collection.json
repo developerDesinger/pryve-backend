@@ -1,0 +1,954 @@
+{
+  "info": {
+    "name": "Pryve - Complete API Collection",
+    "description": "Comprehensive Postman collection for all Pryve API endpoints including Authentication, Chat, Media, Settings, Analytics, and more",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "pryve-api",
+    "version": "1.0.0"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "🔐 Authentication",
+      "item": [
+        {
+          "name": "Register User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/create",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "create"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"fullName\": \"Test User\"\n}"
+            },
+            "description": "Create a new user account"
+          }
+        },
+        {
+          "name": "Verify OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/verify-otp",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "verify-otp"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"otp\": \"123456\"\n}"
+            },
+            "description": "Verify OTP sent to user's email"
+          }
+        },
+        {
+          "name": "Login User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "login"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "description": "Login with email and password"
+          }
+        },
+        {
+          "name": "Social Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/social-login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "social-login"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"provider\": \"google\",\n  \"providerId\": \"google-user-id\",\n  \"email\": \"user@example.com\",\n  \"fullName\": \"Test User\",\n  \"profilePhoto\": \"https://example.com/photo.jpg\"\n}"
+            },
+            "description": "Login with social provider (Google, etc.)"
+          }
+        },
+        {
+          "name": "Get User by Token",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/user-by-token",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "user-by-token"]
+            },
+            "description": "Get current user info using JWT token"
+          }
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/forgot-password",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "forgot-password"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\"\n}"
+            },
+            "description": "Request password reset"
+          }
+        },
+        {
+          "name": "Update Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/update-password",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "update-password"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"otp\": \"123456\",\n  \"newPassword\": \"newpassword123\"\n}"
+            },
+            "description": "Update password using OTP"
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/change-password",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "change-password"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"oldpassword123\",\n  \"newPassword\": \"newpassword123\"\n}"
+            },
+            "description": "Change password when logged in"
+          }
+        }
+      ]
+    },
+    {
+      "name": "👤 User Management",
+      "item": [
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/update-profile/{{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "update-profile", "{{user_id}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Updated Name\",\n  \"bio\": \"Updated bio\",\n  \"profilePhoto\": \"https://example.com/photo.jpg\"\n}"
+            },
+            "description": "Update user profile information"
+          }
+        },
+        {
+          "name": "Delete Account",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/delete-account",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "delete-account"]
+            },
+            "description": "Soft delete user account"
+          }
+        },
+        {
+          "name": "Get All Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/get-all",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "get-all"]
+            },
+            "description": "Get all users (admin endpoint)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "💬 Chat Management",
+      "item": [
+        {
+          "name": "Create Chat",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chats",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chats"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New Chat\",\n  \"description\": \"Chat description\"\n}"
+            },
+            "description": "Create a new chat"
+          }
+        },
+        {
+          "name": "Get All Chats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chats?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chats"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Get all user chats with pagination"
+          }
+        },
+        {
+          "name": "Get Chat Details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chats/{{chat_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chats", "{{chat_id}}"]
+            },
+            "description": "Get specific chat details"
+          }
+        },
+        {
+          "name": "Update Chat",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chats/{{chat_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chats", "{{chat_id}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Chat Name\",\n  \"description\": \"Updated description\"\n}"
+            },
+            "description": "Update chat information"
+          }
+        },
+        {
+          "name": "Delete Chat",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chats/{{chat_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chats", "{{chat_id}}"]
+            },
+            "description": "Delete a chat"
+          }
+        }
+      ]
+    },
+    {
+      "name": "📝 Messages",
+      "item": [
+        {
+          "name": "Send Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chats/{{chat_id}}/messages",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chats", "{{chat_id}}", "messages"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Hello, this is a test message\",\n  \"type\": \"text\"\n}"
+            },
+            "description": "Send a text message to chat"
+          }
+        },
+        {
+          "name": "Send Message with Media",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chats/{{chat_id}}/messages",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chats", "{{chat_id}}", "messages"]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "content",
+                  "value": "Message with image",
+                  "type": "text"
+                },
+                {
+                  "key": "type",
+                  "value": "image",
+                  "type": "text"
+                },
+                {
+                  "key": "media",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "description": "Send message with media attachment"
+          }
+        },
+        {
+          "name": "Get Chat Messages",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chats/{{chat_id}}/messages?page=1&limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chats", "{{chat_id}}", "messages"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Get messages from a chat"
+          }
+        }
+      ]
+    },
+    {
+      "name": "⭐ Favorites",
+      "item": [
+        {
+          "name": "Add to Favorites",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chats/{{chat_id}}/messages/{{message_id}}/favorite",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chats", "{{chat_id}}", "messages", "{{message_id}}", "favorite"]
+            },
+            "description": "Add message to favorites"
+          }
+        },
+        {
+          "name": "Remove from Favorites",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chats/{{chat_id}}/messages/{{message_id}}/favorite",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chats", "{{chat_id}}", "messages", "{{message_id}}", "favorite"]
+            },
+            "description": "Remove message from favorites"
+          }
+        },
+        {
+          "name": "Toggle Favorite",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chats/{{chat_id}}/messages/{{message_id}}/toggle-favorite",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chats", "{{chat_id}}", "messages", "{{message_id}}", "toggle-favorite"]
+            },
+            "description": "Toggle favorite status of message"
+          }
+        },
+        {
+          "name": "Get All Favorites",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chats/favorites/messages?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chats", "favorites", "messages"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Get all favorite messages"
+          }
+        }
+      ]
+    },
+    {
+      "name": "🚀 Journey",
+      "item": [
+        {
+          "name": "Get Journey Data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/journey",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "journey"]
+            },
+            "description": "Get journey page data with user stats and recent activity"
+          }
+        },
+        {
+          "name": "Get Journey Data (Custom Limits)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/journey?favoriteLimit=20&chatLimit=10&messageLimit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "journey"],
+              "query": [
+                {
+                  "key": "favoriteLimit",
+                  "value": "20"
+                },
+                {
+                  "key": "chatLimit",
+                  "value": "10"
+                },
+                {
+                  "key": "messageLimit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Get journey data with custom limits"
+          }
+        },
+        {
+          "name": "Get Journey Messages",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/journey/messages?category=goals-achieved",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "journey", "messages"],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "goals-achieved"
+                }
+              ]
+            },
+            "description": "Get journey messages by category"
+          }
+        }
+      ]
+    },
+    {
+      "name": "📁 Media Library",
+      "item": [
+        {
+          "name": "Get User Media",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/media",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "media"]
+            },
+            "description": "Get all media files for user"
+          }
+        },
+        {
+          "name": "Get Media Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/media/stats",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "media", "stats"]
+            },
+            "description": "Get media statistics for user"
+          }
+        },
+        {
+          "name": "Get Chat Media",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/media/chat/{{chat_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "media", "chat", "{{chat_id}}"]
+            },
+            "description": "Get media files from specific chat"
+          }
+        },
+        {
+          "name": "Delete Media",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/media/{{media_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "media", "{{media_id}}"]
+            },
+            "description": "Delete a media file"
+          }
+        }
+      ]
+    },
+    {
+      "name": "⚙️ Settings",
+      "item": [
+        {
+          "name": "Get Complete Settings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/settings",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "settings"]
+            },
+            "description": "Get all user settings"
+          }
+        },
+        {
+          "name": "Get Feature Toggles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/settings/feature-toggles",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "settings", "feature-toggles"]
+            },
+            "description": "Get all feature toggles"
+          }
+        },
+        {
+          "name": "Update Feature Toggle",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/settings/feature-toggles/{{toggle_name}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "settings", "feature-toggles", "{{toggle_name}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": true,\n  \"description\": \"Updated description\"\n}"
+            },
+            "description": "Update a feature toggle"
+          }
+        },
+        {
+          "name": "Get System Language",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/settings/system-language",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "settings", "system-language"]
+            },
+            "description": "Get system language setting"
+          }
+        },
+        {
+          "name": "Update System Language",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/settings/system-language",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "settings", "system-language"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"language\": \"en\"\n}"
+            },
+            "description": "Update system language"
+          }
+        }
+      ]
+    },
+    {
+      "name": "📊 Analytics",
+      "item": [
+        {
+          "name": "Get Analytics Data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/analytics",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "analytics"]
+            },
+            "description": "Get analytics data"
+          }
+        }
+      ]
+    },
+    {
+      "name": "📋 Dashboard",
+      "item": [
+        {
+          "name": "Get Dashboard Data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/dashboard",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "dashboard"]
+            },
+            "description": "Get dashboard overview data"
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔑 API Keys",
+      "item": [
+        {
+          "name": "Get API Keys",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/api-keys",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "api-keys"]
+            },
+            "description": "Get user API keys"
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔔 Notifications",
+      "item": [
+        {
+          "name": "Get Notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "notifications"]
+            },
+            "description": "Get user notifications"
+          }
+        }
+      ]
+    },
+    {
+      "name": "🎯 AI Configuration",
+      "item": [
+        {
+          "name": "Get AI Config",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai-config",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ai-config"]
+            },
+            "description": "Get AI configuration settings"
+          }
+        }
+      ]
+    },
+    {
+      "name": "💬 Chat Settings",
+      "item": [
+        {
+          "name": "Get Chat Settings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat-settings",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat-settings"]
+            },
+            "description": "Get chat-specific settings"
+          }
+        }
+      ]
+    },
+    {
+      "name": "🎨 Tone Profiles",
+      "item": [
+        {
+          "name": "Get Tone Profiles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tone-profiles",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "tone-profiles"]
+            },
+            "description": "Get available tone profiles"
+          }
+        }
+      ]
+    },
+    {
+      "name": "😊 Emotional Rules",
+      "item": [
+        {
+          "name": "Get Emotional Rules",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/emotional-rules",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "emotional-rules"]
+            },
+            "description": "Get emotional processing rules"
+          }
+        }
+      ]
+    },
+    {
+      "name": "🎯 Support",
+      "item": [
+        {
+          "name": "Get Support Tickets",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/support",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "support"]
+            },
+            "description": "Get user support tickets"
+          }
+        }
+      ]
+    },
+    {
+      "name": "📝 Auth Logs",
+      "item": [
+        {
+          "name": "Get Auth Logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth-logs",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth-logs"]
+            },
+            "description": "Get authentication logs"
+          }
+        }
+      ]
+    },
+    {
+      "name": "💰 RevenueCat Webhooks",
+      "item": [
+        {
+          "name": "RevenueCat Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/webhooks/revenuecat",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "webhooks", "revenuecat"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": {\n    \"type\": \"INITIAL_PURCHASE\",\n    \"app_user_id\": \"user123\",\n    \"product_id\": \"premium_monthly\"\n  }\n}"
+            },
+            "description": "RevenueCat webhook endpoint"
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3400",
+      "type": "string",
+      "description": "Base URL for the API server"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string",
+      "description": "JWT Bearer token for authentication"
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "string",
+      "description": "User ID for user-specific operations"
+    },
+    {
+      "key": "chat_id",
+      "value": "",
+      "type": "string",
+      "description": "Chat ID for chat-specific operations"
+    },
+    {
+      "key": "message_id",
+      "value": "",
+      "type": "string",
+      "description": "Message ID for message-specific operations"
+    },
+    {
+      "key": "media_id",
+      "value": "",
+      "type": "string",
+      "description": "Media ID for media-specific operations"
+    },
+    {
+      "key": "toggle_name",
+      "value": "",
+      "type": "string",
+      "description": "Feature toggle name"
+    }
+  ]
+}
