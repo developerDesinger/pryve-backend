@@ -69,11 +69,12 @@ web_modules/
 .yarn-integrity
 
 # dotenv environment variables file
-.env
-.env.test
-.env.production
 
 # Firebase service account (contains sensitive credentials)
 src/config/firebase-service-account.json
 
 /src/generated/prisma
+temp_auto_push.bat
+temp_interactive_push.bat
+config.bat
+branch_structure.json
