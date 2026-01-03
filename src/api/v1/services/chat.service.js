@@ -6,6 +6,7 @@ const MediaLibraryService = require("./mediaLibrary.service");
 const EmotionDetectionService = require("../utils/emotionDetection");
 const Logger = require("../utils/logger");
 const RevenueCatService = require("./revenuecat.service");
+const { createCleanTitle } = require("../utils/textProcessor");
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -1802,7 +1803,7 @@ Use this context to provide accurate and helpful responses to the user's questio
           category: normalized,
           items: growthMessages.map((msg) => ({
             id: msg.id,
-            title: msg.content,
+            title: createCleanTitle(msg.content),
             primaryTag: mapEmotionToTag(msg.emotion, msg.emotionConfidence),
             tags: buildSecondaryTags(msg),
             source: mapChatTypeToSource(msg.chat?.type),
@@ -1873,7 +1874,7 @@ Use this context to provide accurate and helpful responses to the user's questio
           category: normalized,
           items: heartToHeartMessages.map((msg) => ({
             id: msg.id,
-            title: msg.content,
+            title: createCleanTitle(msg.content),
             primaryTag: mapEmotionToTag(msg.emotion, msg.emotionConfidence),
             tags: buildSecondaryTags(msg),
             source: mapChatTypeToSource(msg.chat?.type),
@@ -1944,7 +1945,7 @@ Use this context to provide accurate and helpful responses to the user's questio
 
           return {
             id: dateKey,
-            title: highlight?.content || "Breakthrough captured.",
+            title: createCleanTitle(highlight?.content) || "Breakthrough captured.",
             primaryTag: mapEmotionToTag(
               highlight?.emotion,
               highlight?.emotionConfidence
@@ -2036,7 +2037,7 @@ Use this context to provide accurate and helpful responses to the user's questio
         category: normalized,
         items: messages.map((msg) => ({
           id: msg.id,
-          title: msg.content,
+          title: createCleanTitle(msg.content),
           primaryTag: mapEmotionToTag(msg.emotion, msg.emotionConfidence),
           tags: buildSecondaryTags(msg),
           source: mapChatTypeToSource(msg.chat?.type),
