@@ -1701,7 +1701,7 @@ Use this context to provide accurate and helpful responses to the user's questio
    * Get journey feed messages by category
    * GET /api/v1/journey/messages
    * 
-   * UPDATED: Now uses same logic as statistics endpoint for consistency
+   * UPDATED: Now returns only favorite messages
    */
   static async getJourneyMessages(userId, query = {}) {
     const { category, limit = 20, cursor } = query;
@@ -1715,24 +1715,17 @@ Use this context to provide accurate and helpful responses to the user's questio
     }
 
     if (normalized === "goals-achieved") {
-      // UPDATED: Use same logic as statistics - get ALL emotional messages, not just favorites
-      const emotionalMessages = await prisma.message.findMany({
-        where: {
-          chat: { userId, isDeleted: false },
-          isDeleted: false,
-          isFromAI: false,
-          emotion: { not: null },
-        },
-        include: {
-          chat: { select: { id: true, name: true, type: true } },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 500,
-      });
-
-      // Get favorites for goal derivation (still needed for the algorithm)
+      // UPDATED: Get only FAVORITED emotional messages for goal derivation
       const favorites = await prisma.userMessageFavorite.findMany({
-        where: { userId },
+        where: {
+          userId,
+          message: {
+            isDeleted: false,
+            isFromAI: false,
+            emotion: { not: null },
+            chat: { userId, isDeleted: false },
+          },
+        },
         include: {
           message: {
             include: {
@@ -1741,8 +1734,13 @@ Use this context to provide accurate and helpful responses to the user's questio
           },
         },
         orderBy: { createdAt: "desc" },
-        take: 100,
+        take: 500,
       });
+
+      // Filter to only emotional user messages
+      const emotionalMessages = favorites
+        .filter(fav => fav.message && !fav.message.isFromAI && fav.message.emotion)
+        .map(fav => fav.message);
 
       const detectedGoals = deriveGoalsFromActivity(emotionalMessages, favorites);
       const boundedGoals = detectedGoals.slice(0, Number(limit) || 20);
@@ -1781,21 +1779,30 @@ Use this context to provide accurate and helpful responses to the user's questio
     }
 
     if (normalized === "growth-moments") {
-      // UPDATED: Use EXACT same logic as statistics endpoint
-      const growthMessages = await prisma.message.findMany({
+      // UPDATED: Get only FAVORITED growth messages
+      const favorites = await prisma.userMessageFavorite.findMany({
         where: {
-          chat: { userId, isDeleted: false },
-          isDeleted: false,
-          isFromAI: false,
-          emotion: { in: ["joy", "surprise"] },
-          emotionConfidence: { gte: 0.7 },
+          userId,
+          message: {
+            isDeleted: false,
+            isFromAI: false,
+            emotion: { in: ["joy", "surprise"] },
+            emotionConfidence: { gte: 0.7 },
+            chat: { userId, isDeleted: false },
+          },
         },
         include: {
-          chat: { select: { id: true, name: true, type: true } },
+          message: {
+            include: {
+              chat: { select: { id: true, name: true, type: true } },
+            },
+          },
         },
         orderBy: { createdAt: "desc" },
         take: Number(limit) || 20,
       });
+
+      const growthMessages = favorites.map(fav => fav.message).filter(Boolean);
 
       return {
         success: true,
@@ -1823,48 +1830,53 @@ Use this context to provide accurate and helpful responses to the user's questio
     }
 
     if (normalized === "heart-to-hearts") {
-      // UPDATED: Use same logic as statistics - get messages from chats with >= 3 emotional messages
-      const chatsWithEmotionalMessages = await prisma.chat.findMany({
+      // UPDATED: Get only FAVORITED messages from chats with >= 3 favorited emotional messages
+      const favorites = await prisma.userMessageFavorite.findMany({
         where: {
           userId,
-          isDeleted: false,
-        },
-        select: {
-          id: true,
-          name: true,
-          type: true,
-          messages: {
-            where: {
-              isDeleted: false,
-              isFromAI: false,
-              emotion: { not: null },
-              emotionConfidence: { gte: 0.6 },
-            },
-            select: {
-              id: true,
-              content: true,
-              emotion: true,
-              emotionConfidence: true,
-              createdAt: true,
-            },
-            orderBy: { createdAt: "desc" },
+          message: {
+            isDeleted: false,
+            isFromAI: false,
+            emotion: { not: null },
+            emotionConfidence: { gte: 0.6 },
+            chat: { userId, isDeleted: false },
           },
         },
+        include: {
+          message: {
+            include: {
+              chat: { select: { id: true, name: true, type: true } },
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
       });
 
-      // Filter chats with >= 3 emotional messages (same as statistics logic)
-      const qualifiedChats = chatsWithEmotionalMessages.filter(
-        (chat) => chat.messages.length >= 3
-      );
+      // Group by chat and filter chats with >= 3 favorited emotional messages
+      const chatMap = new Map();
+      favorites.forEach(fav => {
+        if (fav.message && fav.message.chat) {
+          const chatId = fav.message.chat.id;
+          if (!chatMap.has(chatId)) {
+            chatMap.set(chatId, {
+              chat: fav.message.chat,
+              messages: [],
+            });
+          }
+          chatMap.get(chatId).messages.push(fav.message);
+        }
+      });
+
+      // Filter to chats with >= 3 favorited emotional messages
+      const qualifiedChats = Array.from(chatMap.values())
+        .filter(item => item.messages.length >= 3);
 
       // Get messages from qualified chats
       const heartToHeartMessages = qualifiedChats
-        .flatMap((chat) => 
-          chat.messages.map((msg) => ({
-            ...msg,
-            chat: { id: chat.id, name: chat.name, type: chat.type }
-          }))
-        )
+        .flatMap(item => item.messages.map(msg => ({
+          ...msg,
+          chat: item.chat,
+        })))
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
         .slice(0, Number(limit) || 20);
 
@@ -1894,23 +1906,29 @@ Use this context to provide accurate and helpful responses to the user's questio
     }
 
     if (normalized === "breakthrough-days") {
-      // UPDATED: Use same logic as statistics - get ALL emotional messages with confidence >= 0.7
-      const emotionalMessages = await prisma.message.findMany({
+      // UPDATED: Get only FAVORITED emotional messages with confidence >= 0.7
+      const favorites = await prisma.userMessageFavorite.findMany({
         where: {
-          chat: { userId, isDeleted: false },
-          isDeleted: false,
-          isFromAI: false,
-          emotion: { not: null },
-          emotionConfidence: { gte: 0.7 },
+          userId,
+          message: {
+            isDeleted: false,
+            isFromAI: false,
+            emotion: { not: null },
+            emotionConfidence: { gte: 0.7 },
+            chat: { userId, isDeleted: false },
+          },
         },
         include: {
-          chat: { select: { id: true, name: true, type: true } },
+          message: {
+            include: {
+              chat: { select: { id: true, name: true, type: true } },
+            },
+          },
         },
         orderBy: { createdAt: "desc" },
-        take: 1000, // Same as statistics logic
       });
 
-      const rawMessages = emotionalMessages;
+      const rawMessages = favorites.map(fav => fav.message).filter(Boolean);
 
       const grouped = rawMessages.reduce((acc, msg) => {
         const key = toDateKey(msg.createdAt);
@@ -1987,8 +2005,7 @@ Use this context to provide accurate and helpful responses to the user's questio
       };
     }
 
-    // UPDATED: For any other categories, use ALL emotional messages (same as statistics logic)
-    // instead of only favorites
+    // UPDATED: For any other categories, use only FAVORITED messages
     const filterConfig = JOURNEY_CATEGORY_FILTERS[normalized];
 
     if (!filterConfig) {
@@ -2014,22 +2031,31 @@ Use this context to provide accurate and helpful responses to the user's questio
       }
     }
     
-    // UPDATED: Get ALL emotional messages, not just favorites
-    const messages = await prisma.message.findMany({
+    // UPDATED: Get only FAVORITED emotional messages
+    const favorites = await prisma.userMessageFavorite.findMany({
       where: {
-        chat: { userId, isDeleted: false },
-        isDeleted: false,
-        isFromAI: false,
-        emotion: { not: null },
-        ...cursorFilter,
-        ...filterConfig.where,
+        userId,
+        message: {
+          chat: { userId, isDeleted: false },
+          isDeleted: false,
+          isFromAI: false,
+          emotion: { not: null },
+          ...cursorFilter,
+          ...filterConfig.where,
+        },
       },
       include: {
-        chat: { select: { id: true, name: true, type: true } },
+        message: {
+          include: {
+            chat: { select: { id: true, name: true, type: true } },
+          },
+        },
       },
       orderBy: { createdAt: "desc" },
       take,
     });
+
+    const messages = favorites.map(fav => fav.message).filter(Boolean);
 
     return {
       success: true,
@@ -2060,6 +2086,7 @@ Use this context to provide accurate and helpful responses to the user's questio
   /**
    * Get journey page data for user
    * GET /api/v1/journey
+   * UPDATED: Now returns only favorite messages
    */
   static async getJourneyPageData(userId, query) {
     const favoriteLimit = parseInt(query.favoriteLimit) || 10;
@@ -2086,109 +2113,21 @@ Use this context to provide accurate and helpful responses to the user's questio
         throw new AppError("User not found.", HttpStatusCodes.NOT_FOUND);
       }
 
-      // Calculate all metrics in parallel
+      // UPDATED: Calculate all metrics using only favorite messages
       let heartToHeartsResult, growthMomentsCount, growthMomentsList, breakthroughDaysData;
       let totalChats, totalMessages, totalFavorites, totalMedia, favoriteMessages;
       
       try {
         [
-          // 1. Heart-to-hearts: Optimized query with aggregation
-          heartToHeartsResult,
-          // 2. Growth Moments: Direct count and detail list
-          growthMomentsCount,
-          growthMomentsList,
-          // 3. Breakthrough Days: Optimized with date grouping
-          breakthroughDaysData,
-          // 4. Statistics
+          // Statistics (unchanged)
           totalChats,
           totalMessages,
           totalFavorites,
           totalMedia,
-          // 5. Favorite messages for vault
+          // Favorite messages for vault
           favoriteMessages,
         ] = await Promise.all([
-        // Heart-to-hearts: Count chats with >= 3 emotional messages
-        prisma.chat.findMany({
-          where: {
-            userId,
-            isDeleted: false,
-          },
-          select: {
-            id: true,
-            name: true,
-            type: true,
-            updatedAt: true,
-            _count: {
-              select: {
-                messages: {
-                  where: {
-                    isDeleted: false,
-                    isFromAI: false,
-                    emotion: { not: null },
-                    emotionConfidence: { gte: 0.6 },
-                  },
-                },
-              },
-            },
-          },
-        }),
-
-        // Growth Moments - Count
-        prisma.message.count({
-          where: {
-            chat: { userId, isDeleted: false },
-            isDeleted: false,
-            isFromAI: false,
-            emotion: { in: ["joy", "surprise"] },
-            emotionConfidence: { gte: 0.7 },
-          },
-        }),
-
-        // Growth Moments - Detail List
-        prisma.message.findMany({
-          where: {
-            chat: { userId, isDeleted: false },
-            isDeleted: false,
-            isFromAI: false,
-            emotion: { in: ["joy", "surprise"] },
-            emotionConfidence: { gte: 0.7 },
-          },
-          select: {
-            id: true,
-            content: true,
-            emotion: true,
-            emotionConfidence: true,
-            createdAt: true,
-            chat: {
-              select: {
-                id: true,
-                name: true,
-                type: true,
-              },
-            },
-          },
-          orderBy: { createdAt: "desc" },
-          take: messageLimit,
-        }),
-
-        // Breakthrough Days: Get messages grouped by date
-        prisma.message.findMany({
-          where: {
-            chat: { userId, isDeleted: false },
-            isDeleted: false,
-            isFromAI: false,
-            emotion: { not: null },
-            emotionConfidence: { gte: 0.7 },
-          },
-          select: {
-            createdAt: true,
-            emotion: true,
-          },
-          // Limit to prevent memory issues
-          take: 1000,
-        }),
-
-        // Statistics
+        // Statistics (unchanged)
         prisma.chat.count({
           where: { userId, isDeleted: false },
         }),
@@ -2233,13 +2172,10 @@ Use this context to provide accurate and helpful responses to the user's questio
           },
         }),
       ]);
+
       } catch (promiseError) {
         console.error("Error in Promise.all execution:", promiseError);
         // Set default values if Promise.all fails
-        heartToHeartsResult = [];
-        growthMomentsCount = 0;
-        growthMomentsList = [];
-        breakthroughDaysData = [];
         totalChats = 0;
         totalMessages = 0;
         totalFavorites = 0;
@@ -2248,85 +2184,118 @@ Use this context to provide accurate and helpful responses to the user's questio
       }
 
       // Ensure all variables are defined with fallbacks
-      heartToHeartsResult = heartToHeartsResult || [];
-      growthMomentsCount = growthMomentsCount || 0;
-      growthMomentsList = growthMomentsList || [];
-      breakthroughDaysData = breakthroughDaysData || [];
       totalChats = totalChats || 0;
       totalMessages = totalMessages || 0;
       totalFavorites = totalFavorites || 0;
       totalMedia = totalMedia || 0;
       favoriteMessages = favoriteMessages || [];
 
-      const [messagesForGoals, favoritesForGoals] = await Promise.all([
-        prisma.message.findMany({
-          where: {
-            chat: { userId, isDeleted: false },
+      // Get all favorited emotional messages for processing categories
+      const allFavoritedEmotionalMessages = await prisma.userMessageFavorite.findMany({
+        where: {
+          userId,
+          message: {
             isDeleted: false,
             isFromAI: false,
             emotion: { not: null },
+            chat: { userId, isDeleted: false },
           },
-          include: {
-            chat: { select: { id: true, name: true, type: true } },
-          },
-          orderBy: { createdAt: "asc" },
-          take: 500,
-        }),
-        prisma.userMessageFavorite.findMany({
-          where: { userId },
-          include: {
-            message: {
-              include: {
-                chat: { select: { id: true, name: true, type: true } },
-              },
+        },
+        include: {
+          message: {
+            include: {
+              chat: { select: { id: true, name: true, type: true } },
             },
           },
-          orderBy: { createdAt: "desc" },
-          take: 100,
-        }),
-      ]);
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      // Extract messages from favorites
+      const favoritedMessages = allFavoritedEmotionalMessages
+        .map(fav => fav.message)
+        .filter(msg => msg !== null);
+
+      // Goals Achieved: Only use favorited messages for goal derivation
+      const messagesForGoals = favoritedMessages;
+      const favoritesForGoals = allFavoritedEmotionalMessages;
 
       const derivedGoals = deriveGoalsFromActivity(
         messagesForGoals,
         favoritesForGoals
       );
+      const goalsAchieved = derivedGoals.length;
 
-      // Process heart-to-hearts
-      const heartToHeartsQualified = heartToHeartsResult.filter(
-        (chat) => chat._count.messages >= 3
-      );
+      // Process Heart-to-Hearts: Group favorited messages by chat
+      const chatFavoritesMap = new Map();
+      favoritedMessages
+        .filter(msg => msg.emotionConfidence >= 0.6)
+        .forEach(msg => {
+          const chatId = msg.chat?.id;
+          if (chatId) {
+            if (!chatFavoritesMap.has(chatId)) {
+              chatFavoritesMap.set(chatId, {
+                id: chatId,
+                name: msg.chat.name,
+                type: msg.chat.type,
+                count: 0,
+                updatedAt: msg.createdAt,
+              });
+            }
+            chatFavoritesMap.get(chatId).count++;
+            // Update updatedAt to most recent message
+            if (new Date(msg.createdAt) > new Date(chatFavoritesMap.get(chatId).updatedAt)) {
+              chatFavoritesMap.get(chatId).updatedAt = msg.createdAt;
+            }
+          }
+        });
+
+      // Filter chats with >= 3 favorited emotional messages
+      const heartToHeartsQualified = Array.from(chatFavoritesMap.values())
+        .filter(chat => chat.count >= 3)
+        .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+      
       const heartToHearts = heartToHeartsQualified.length;
-
-      // Create heart-to-hearts detail list
       const heartToHeartsList = heartToHeartsQualified
         .slice(0, chatLimit)
         .map((chat) => ({
           chatId: chat.id,
           chatName: chat.name,
           chatType: chat.type,
-          emotionalMessageCount: chat._count.messages,
+          emotionalMessageCount: chat.count,
           lastUpdatedAt: chat.updatedAt,
         }));
 
-      // Process growth moments - keep existing count, add detail list
-      const growthMomentsDetailList = Array.isArray(growthMomentsList) 
-        ? growthMomentsList.map((msg) => ({
-        id: msg.id,
-        content: msg.content,
-        emotion: msg.emotion,
-        emotionConfidence: msg.emotionConfidence,
-        createdAt: msg.createdAt,
-        chat: {
-          id: msg.chat.id,
-          name: msg.chat.name,
-          type: msg.chat.type,
-        },
-      }))
-        : [];
+      // Process Growth Moments: Only favorited messages with joy/surprise
+      const growthMomentsFavorited = favoritedMessages.filter(
+        msg => 
+          ["joy", "surprise"].includes(msg.emotion) && 
+          msg.emotionConfidence >= 0.7
+      );
+      
+      growthMomentsCount = growthMomentsFavorited.length;
+      const growthMomentsDetailList = growthMomentsFavorited
+        .slice(0, messageLimit)
+        .map((msg) => ({
+          id: msg.id,
+          content: msg.content,
+          emotion: msg.emotion,
+          emotionConfidence: msg.emotionConfidence,
+          createdAt: msg.createdAt,
+          chat: {
+            id: msg.chat?.id,
+            name: msg.chat?.name,
+            type: msg.chat?.type,
+          },
+        }));
 
-      // Process breakthrough days (group by date)
+      // Process Breakthrough Days: Group favorited messages by date
+      const breakthroughMessages = favoritedMessages.filter(
+        msg => msg.emotionConfidence >= 0.7
+      );
+
       const dailyEmotions = {};
-      breakthroughDaysData.forEach((msg) => {
+      breakthroughMessages.forEach((msg) => {
         const dateKey = new Date(msg.createdAt).toISOString().split("T")[0];
         if (!dailyEmotions[dateKey]) {
           dailyEmotions[dateKey] = {
@@ -2344,53 +2313,40 @@ Use this context to provide accurate and helpful responses to the user's questio
         (day) => day.count >= 5 && day.positiveCount >= 2
       ).length;
 
-      const goalsAchieved = derivedGoals.length;
-
-      // Weekly Journey: Fetch all messages at once, then process in memory
+      // Weekly Journey: Only count favorited messages
       const currentDate = new Date();
       const weeksSinceRegistration = Math.floor(
         (currentDate - new Date(user.createdAt)) / (7 * 24 * 60 * 60 * 1000)
       );
 
-      // Fetch messages for last 4 weeks in a single query
+      // Fetch favorited messages for last 4 weeks
       const fourWeeksAgo = new Date(currentDate);
       fourWeeksAgo.setDate(currentDate.getDate() - 28);
 
-      // First priority: messages WITH emotions
-      let weeklyMessages = await prisma.message.findMany({
+      const weeklyFavorites = await prisma.userMessageFavorite.findMany({
         where: {
-          chat: { userId, isDeleted: false },
-          isDeleted: false,
-          isFromAI: false,
+          userId,
           createdAt: { gte: fourWeeksAgo },
-          emotion: { not: null },
-        },
-        select: {
-          emotion: true,
-          emotionConfidence: true,
-          createdAt: true,
-        },
-      });
-
-      // Track if using emotional messages or fallback
-      let usingEmotionalMessages = weeklyMessages.length > 0;
-
-      // Fallback: if no emotional messages, get ALL user messages for progress
-      if (!usingEmotionalMessages) {
-        weeklyMessages = await prisma.message.findMany({
-          where: {
-            chat: { userId, isDeleted: false },
+          message: {
             isDeleted: false,
             isFromAI: false,
-            createdAt: { gte: fourWeeksAgo },
+            chat: { userId, isDeleted: false },
+            emotion: { not: null },
           },
-          select: {
-            emotion: true,
-            emotionConfidence: true,
-            createdAt: true,
+        },
+        include: {
+          message: {
+            select: {
+              emotion: true,
+              emotionConfidence: true,
+              createdAt: true,
+            },
           },
-        });
-      }
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      const weeklyMessages = weeklyFavorites.map(fav => fav.message);
 
       // Process weekly data
       // Week 1 = current week (includes today), Week 2-4 = previous weeks
@@ -2425,23 +2381,9 @@ Use this context to provide accurate and helpful responses to the user's questio
           return msgDate >= weekStart && msgDate <= weekEnd;
         });
 
-        // Calculate progress based on message type:
-        // - WITH emotions: 20 messages = 100% (full credit)
-        // - WITHOUT emotions: 20 messages = 50% max (half credit - missing emotional data)
-        let rawProgress;
-        let maxProgress;
-        
-        if (usingEmotionalMessages) {
-          // Full credit for emotional messages
-          rawProgress = (weekMsgs.length / 20) * 100;
-          maxProgress = 100;
-        } else {
-          // Half credit for non-emotional messages (caps at 50%)
-          rawProgress = (weekMsgs.length / 20) * 50;
-          maxProgress = 50;
-        }
-        
-        const progress = Math.min(maxProgress, Math.max(0, Math.floor(rawProgress)));
+        // Calculate progress: 20 favorited emotional messages = 100%
+        const rawProgress = (weekMsgs.length / 20) * 100;
+        const progress = Math.min(100, Math.max(0, Math.floor(rawProgress)));
 
         // Get dominant emotion
         const emotionCounts = {};
