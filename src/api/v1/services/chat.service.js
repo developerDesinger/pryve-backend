@@ -1830,7 +1830,8 @@ Use this context to provide accurate and helpful responses to the user's questio
     }
 
     if (normalized === "heart-to-hearts") {
-      // UPDATED: Get only FAVORITED messages from chats with >= 3 favorited emotional messages
+      // IMPORTANT: Get ONLY FAVORITED messages from chats with >= 3 favorited emotional messages
+      // This query only returns messages that are in the userMessageFavorite table
       const favorites = await prisma.userMessageFavorite.findMany({
         where: {
           userId,
@@ -1852,18 +1853,23 @@ Use this context to provide accurate and helpful responses to the user's questio
         orderBy: { createdAt: "desc" },
       });
 
+      // Extract only favorited messages (double-check to ensure we only use favorites)
+      const favoritedMessages = favorites
+        .map(fav => fav.message)
+        .filter(msg => msg !== null && msg !== undefined);
+
       // Group by chat and filter chats with >= 3 favorited emotional messages
       const chatMap = new Map();
-      favorites.forEach(fav => {
-        if (fav.message && fav.message.chat) {
-          const chatId = fav.message.chat.id;
+      favoritedMessages.forEach(msg => {
+        if (msg && msg.chat) {
+          const chatId = msg.chat.id;
           if (!chatMap.has(chatId)) {
             chatMap.set(chatId, {
-              chat: fav.message.chat,
+              chat: msg.chat,
               messages: [],
             });
           }
-          chatMap.get(chatId).messages.push(fav.message);
+          chatMap.get(chatId).messages.push(msg);
         }
       });
 
@@ -1871,12 +1877,9 @@ Use this context to provide accurate and helpful responses to the user's questio
       const qualifiedChats = Array.from(chatMap.values())
         .filter(item => item.messages.length >= 3);
 
-      // Get messages from qualified chats
+      // Get ONLY favorited messages from qualified chats
       const heartToHeartMessages = qualifiedChats
-        .flatMap(item => item.messages.map(msg => ({
-          ...msg,
-          chat: item.chat,
-        })))
+        .flatMap(item => item.messages)
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
         .slice(0, Number(limit) || 20);
 

@@ -27,26 +27,16 @@ const MEANINGLESS_WORDS = new Set([
  * @returns {string} - Cleaned text
  */
 function removeShortMeaninglessWords(text, minWordLength = 3) {
-  if (!text || typeof text !== 'string') {
+  if (!text || typeof text !== "string") {
     return text;
   }
 
-  // Split text into words, preserving punctuation context
   const words = text.toLowerCase().split(/\s+/);
-  
-  const filteredWords = words.filter(word => {
-    // Remove punctuation for checking but keep original word
-    const cleanWord = word.replace(/[^\w]/g, '');
-    
-    // Skip empty words
+
+  const filteredWords = words.filter((word) => {
+    const cleanWord = word.replace(/[^\w]/g, "");
     if (!cleanWord) return false;
-    
-    // Remove if it's in the meaningless words list
     if (MEANINGLESS_WORDS.has(cleanWord)) return false;
-    
-    // Keep word if:
-    // 1. It's longer than minimum length, OR
-    // 2. It contains numbers or special characters (likely meaningful)
     return (
       cleanWord.length >= minWordLength ||
       /\d/.test(cleanWord) ||
@@ -54,15 +44,14 @@ function removeShortMeaninglessWords(text, minWordLength = 3) {
     );
   });
 
-  // Rejoin and clean up extra spaces
-  let result = filteredWords.join(' ').trim();
-  
-  // If result is too short or empty, return first few words of original
+  let result = filteredWords.join(" ").trim();
+
+  // NEW BEHAVIOR: if result is empty or too short, just return empty
+  // (caller can decide to skip this message or handle it differently)
   if (result.length < 10) {
-    const originalWords = text.split(/\s+/);
-    result = originalWords.slice(0, Math.min(5, originalWords.length)).join(' ');
+    return "";
   }
-  
+
   return result;
 }
 
