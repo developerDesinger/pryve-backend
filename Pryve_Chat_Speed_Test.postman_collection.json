@@ -1,0 +1,616 @@
+{
+	"info": {
+		"_postman_id": "chat-speed-test-collection",
+		"name": "Pryve Chat Speed Test",
+		"description": "Test chat API endpoints and speed optimizations",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Authentication",
+			"item": [
+				{
+					"name": "Login User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    if (response.success && response.data && response.data.token) {",
+									"        pm.environment.set('auth_token', response.data.token);",
+									"        pm.environment.set('user_id', response.data.user.id);",
+									"        console.log('✅ Login successful! Token saved.');",
+									"        console.log('🔑 Token:', response.data.token.substring(0, 20) + '...');",
+									"        console.log('👤 User ID:', response.data.user.id);",
+									"    }",
+									"} else {",
+									"    console.log('❌ Login failed:', pm.response.text());",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"your-email@example.com\",\n    \"password\": \"your-password\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/users/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"login"
+							]
+						},
+						"description": "Login to get JWT token. Update email/password in body."
+					},
+					"response": []
+				},
+				{
+					"name": "Social Login (Alternative)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    if (response.success && response.data && response.data.token) {",
+									"        pm.environment.set('auth_token', response.data.token);",
+									"        pm.environment.set('user_id', response.data.user.id);",
+									"        console.log('✅ Social login successful! Token saved.');",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"speedtest@test.com\",\n    \"fullName\": \"Speed Test User\",\n    \"loginType\": \"GOOGLE\",\n    \"provider\": \"google\",\n    \"providerId\": \"google_test_123\",\n    \"profilePhoto\": \"https://example.com/photo.jpg\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/users/social-login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"social-login"
+							]
+						},
+						"description": "Alternative login method using social login"
+					},
+					"response": []
+				}
+			],
+			"description": "Authentication endpoints to get JWT token"
+		},
+		{
+			"name": "2. Chat Management",
+			"item": [
+				{
+					"name": "Create Chat",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    if (response.success && response.chat) {",
+									"        pm.environment.set('chat_id', response.chat.id);",
+									"        console.log('✅ Chat created successfully!');",
+									"        console.log('💬 Chat ID:', response.chat.id);",
+									"        console.log('📝 Chat Name:', response.chat.name);",
+									"    }",
+									"} else {",
+									"    console.log('❌ Chat creation failed:', pm.response.text());",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Speed Test Chat\",\n    \"description\": \"Testing AI response speed optimizations\",\n    \"aiModel\": \"gpt-4o\",\n    \"temperature\": 0.7\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/chats",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"chats"
+							]
+						},
+						"description": "Create a new chat for testing"
+					},
+					"response": []
+				},
+				{
+					"name": "Get User Chats",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/chats?page=1&limit=10",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"chats"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "limit",
+									"value": "10"
+								}
+							]
+						},
+						"description": "Get all user chats"
+					},
+					"response": []
+				}
+			],
+			"description": "Chat management endpoints"
+		},
+		{
+			"name": "3. Speed Optimization Tests",
+			"item": [
+				{
+					"name": "Simple Message (Should use gpt-4o-mini)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const startTime = pm.globals.get('request_start_time');",
+									"const endTime = Date.now();",
+									"const totalTime = endTime - startTime;",
+									"",
+									"if (pm.response.code === 200 || pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    const aiResponse = response.data.aiResponse;",
+									"    ",
+									"    console.log('🚀 SIMPLE MESSAGE TEST RESULTS:');",
+									"    console.log('=' .repeat(50));",
+									"    console.log('⏱️  Total Time:', totalTime + 'ms');",
+									"    console.log('🤖 AI Processing:', (aiResponse?.processingTime || 0) + 'ms');",
+									"    console.log('🧠 Model Used:', aiResponse?.aiModel || 'unknown');",
+									"    console.log('🔢 Tokens Used:', aiResponse?.tokensUsed || 0);",
+									"    console.log('📊 Network + DB:', (totalTime - (aiResponse?.processingTime || 0)) + 'ms');",
+									"    ",
+									"    // Check optimization",
+									"    if (aiResponse?.aiModel === 'gpt-4o-mini') {",
+									"        console.log('✅ OPTIMIZATION SUCCESS: Using fast model!');",
+									"    } else {",
+									"        console.log('⚠️  Expected gpt-4o-mini but got:', aiResponse?.aiModel);",
+									"    }",
+									"    ",
+									"    // Speed analysis",
+									"    if (totalTime < 1500) {",
+									"        console.log('🚀 EXCELLENT SPEED - Under 1.5 seconds!');",
+									"    } else if (totalTime < 3000) {",
+									"        console.log('✅ GOOD SPEED - Under 3 seconds');",
+									"    } else {",
+									"        console.log('⚠️  SLOW - Over 3 seconds');",
+									"    }",
+									"    ",
+									"    console.log('💭 Response Preview:', (aiResponse?.content || '').substring(0, 100) + '...');",
+									"    console.log('=' .repeat(50));",
+									"} else {",
+									"    console.log('❌ Request failed:', pm.response.text());",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"pm.globals.set('request_start_time', Date.now());"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"content\": \"Hi\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/chats/{{chat_id}}/messages",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"chats",
+								"{{chat_id}}",
+								"messages"
+							]
+						},
+						"description": "Test simple message - should use gpt-4o-mini for speed"
+					},
+					"response": []
+				},
+				{
+					"name": "Short Question (Should use gpt-4o-mini)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const startTime = pm.globals.get('request_start_time');",
+									"const endTime = Date.now();",
+									"const totalTime = endTime - startTime;",
+									"",
+									"if (pm.response.code === 200 || pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    const aiResponse = response.data.aiResponse;",
+									"    ",
+									"    console.log('🚀 SHORT QUESTION TEST RESULTS:');",
+									"    console.log('=' .repeat(50));",
+									"    console.log('⏱️  Total Time:', totalTime + 'ms');",
+									"    console.log('🤖 AI Processing:', (aiResponse?.processingTime || 0) + 'ms');",
+									"    console.log('🧠 Model Used:', aiResponse?.aiModel || 'unknown');",
+									"    console.log('🔢 Tokens Used:', aiResponse?.tokensUsed || 0);",
+									"    ",
+									"    if (aiResponse?.aiModel === 'gpt-4o-mini') {",
+									"        console.log('✅ OPTIMIZATION SUCCESS: Using fast model!');",
+									"    } else {",
+									"        console.log('⚠️  Expected gpt-4o-mini but got:', aiResponse?.aiModel);",
+									"    }",
+									"    ",
+									"    if (totalTime < 2000) {",
+									"        console.log('🚀 EXCELLENT SPEED!');",
+									"    } else {",
+									"        console.log('⚠️  Could be faster');",
+									"    }",
+									"    console.log('=' .repeat(50));",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"pm.globals.set('request_start_time', Date.now());"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"content\": \"How are you?\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/chats/{{chat_id}}/messages",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"chats",
+								"{{chat_id}}",
+								"messages"
+							]
+						},
+						"description": "Test short question - should use gpt-4o-mini"
+					},
+					"response": []
+				},
+				{
+					"name": "Complex Question (Should use gpt-4o)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const startTime = pm.globals.get('request_start_time');",
+									"const endTime = Date.now();",
+									"const totalTime = endTime - startTime;",
+									"",
+									"if (pm.response.code === 200 || pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    const aiResponse = response.data.aiResponse;",
+									"    ",
+									"    console.log('🚀 COMPLEX QUESTION TEST RESULTS:');",
+									"    console.log('=' .repeat(50));",
+									"    console.log('⏱️  Total Time:', totalTime + 'ms');",
+									"    console.log('🤖 AI Processing:', (aiResponse?.processingTime || 0) + 'ms');",
+									"    console.log('🧠 Model Used:', aiResponse?.aiModel || 'unknown');",
+									"    console.log('🔢 Tokens Used:', aiResponse?.tokensUsed || 0);",
+									"    ",
+									"    if (aiResponse?.aiModel === 'gpt-4o') {",
+									"        console.log('✅ OPTIMIZATION SUCCESS: Using powerful model for complex query!');",
+									"    } else {",
+									"        console.log('⚠️  Expected gpt-4o but got:', aiResponse?.aiModel);",
+									"    }",
+									"    ",
+									"    if (totalTime < 5000) {",
+									"        console.log('✅ GOOD SPEED for complex query!');",
+									"    } else {",
+									"        console.log('⚠️  Slower than expected for complex query');",
+									"    }",
+									"    ",
+									"    console.log('💭 Response Quality:', aiResponse?.content ? 'Generated' : 'No response');",
+									"    console.log('=' .repeat(50));",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"pm.globals.set('request_start_time', Date.now());"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"content\": \"Can you help me understand the difference between anxiety and stress, and provide detailed coping strategies with specific examples and techniques?\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/chats/{{chat_id}}/messages",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"chats",
+								"{{chat_id}}",
+								"messages"
+							]
+						},
+						"description": "Test complex question - should use gpt-4o for quality"
+					},
+					"response": []
+				},
+				{
+					"name": "Streaming Message Test",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"console.log('🚀 STREAMING TEST:');",
+									"console.log('Note: Streaming responses show chunks in real-time');",
+									"console.log('Check server logs for optimization messages');",
+									"console.log('Response should start appearing immediately');",
+									"",
+									"if (pm.response.code === 200) {",
+									"    console.log('✅ Streaming endpoint is working');",
+									"} else {",
+									"    console.log('❌ Streaming failed:', pm.response.text());",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"content\": \"Tell me a short story about overcoming challenges\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/chats/{{chat_id}}/messages/stream",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"chats",
+								"{{chat_id}}",
+								"messages",
+								"stream"
+							]
+						},
+						"description": "Test streaming endpoint for real-time responses"
+					},
+					"response": []
+				}
+			],
+			"description": "Test speed optimizations with different query types"
+		},
+		{
+			"name": "4. Chat History",
+			"item": [
+				{
+					"name": "Get Chat Messages",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/chats/{{chat_id}}/messages?page=1&limit=20",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"chats",
+								"{{chat_id}}",
+								"messages"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "limit",
+									"value": "20"
+								}
+							]
+						},
+						"description": "Get chat message history"
+					},
+					"response": []
+				},
+				{
+					"name": "Search Messages",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/chats/{{chat_id}}/messages/search?q=anxiety&page=1&limit=10",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"chats",
+								"{{chat_id}}",
+								"messages",
+								"search"
+							],
+							"query": [
+								{
+									"key": "q",
+									"value": "anxiety"
+								},
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "limit",
+									"value": "10"
+								}
+							]
+						},
+						"description": "Search messages within chat"
+					},
+					"response": []
+				}
+			],
+			"description": "Chat history and search endpoints"
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Set base URL if not already set",
+					"if (!pm.environment.get('base_url')) {",
+					"    pm.environment.set('base_url', 'http://localhost:3400/api/v1');",
+					"}"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3400/api/v1",
+			"type": "string"
+		}
+	]
+}

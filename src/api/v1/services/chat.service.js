@@ -7,10 +7,22 @@ const EmotionDetectionService = require("../utils/emotionDetection");
 const Logger = require("../utils/logger");
 const RevenueCatService = require("./revenuecat.service");
 const { createCleanTitle } = require("../utils/textProcessor");
+const cacheService = require("../utils/cache.service");
+const responseCacheService = require("./responseCache.service");
 
-// Initialize OpenAI client
+// Initialize OpenAI client with connection pooling for faster requests
+const https = require('https');
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  maxSockets: 50,
+  maxFreeSockets: 10,
+  timeout: 60000,
+  freeSocketTimeout: 30000
+});
+
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
+  httpAgent: httpsAgent, // Reuse connections for faster requests
 });
 
 // Helper to compute zodiac sign from birthday
@@ -97,6 +109,62 @@ const getMaxTokenParam = (model, defaultTokens = 1000) => {
     return { max_completion_tokens: defaultTokens };
   }
   return { max_tokens: defaultTokens };
+};
+
+// OPTIMIZATION: Smart model selection based on query complexity
+const getOptimalModel = (content, defaultModel) => {
+  if (!content) return defaultModel;
+  
+  // Simple queries - use faster, cheaper model
+  if (content.length < 50 || isSimpleQuery(content)) {
+    return 'gpt-4o-mini'; // Faster model for simple queries
+  }
+  
+  // Complex queries - use powerful model
+  return defaultModel || 'gpt-4o';
+};
+
+const isSimpleQuery = (content) => {
+  const simplePatterns = [
+    /^(hi|hello|hey|thanks|thank you|ok|okay|yes|no|bye|goodbye)$/i,
+    /^how are you\??$/i,
+    /^(good morning|good night|good evening)$/i,
+    /^.{1,30}$/  // Very short messages
+  ];
+  return simplePatterns.some(pattern => pattern.test(content.trim()));
+};
+
+// OPTIMIZATION: Smart prompt selection based on query type
+const getOptimalPrompt = (content, fullPrompt) => {
+  if (!content || !fullPrompt) return fullPrompt;
+  
+  const QUICK_PROMPTS = {
+    greeting: "You are a helpful, friendly assistant. Be warm and concise.",
+    simple: "You are a helpful assistant. Give clear, concise answers.",
+    encouragement: "You are a supportive friend. Be encouraging and uplifting.",
+    question: "You are a knowledgeable assistant. Answer clearly and helpfully."
+  };
+  
+  const contentLower = content.toLowerCase();
+  
+  // Use shorter prompts for simple interactions
+  if (content.length < 20) return QUICK_PROMPTS.simple;
+  if (contentLower.includes('hi') || contentLower.includes('hello') || contentLower.includes('hey')) {
+    return QUICK_PROMPTS.greeting;
+  }
+  if (contentLower.includes('encourage') || contentLower.includes('support') || contentLower.includes('help me feel')) {
+    return QUICK_PROMPTS.encouragement;
+  }
+  if (contentLower.includes('what') || contentLower.includes('how') || contentLower.includes('why')) {
+    return QUICK_PROMPTS.question;
+  }
+  
+  // For complex queries, use full prompt but truncate if too long
+  if (fullPrompt.length > 2000) {
+    return fullPrompt.substring(0, 2000) + "\n\nProvide helpful, accurate responses.";
+  }
+  
+  return fullPrompt;
 };
 
 const formatDuration = (start, end) => {
@@ -444,21 +512,52 @@ class ChatService {
   static async sendMessage(chatId, userId, data) {
     const { content, replyToId, imageFile, audioFile, videoFile } = data;
 
-    // Get chat details
-    const chat = await prisma.chat.findFirst({
-      where: { id: chatId, userId },
-    });
+    // OPTIMIZATION: Check cache for AI config first
+    const AI_CONFIG_CACHE_KEY = "ai_config";
+    let aiConfig = cacheService.get(AI_CONFIG_CACHE_KEY);
+    
+    // OPTIMIZATION: Parallelize independent database queries
+    // Run chat lookup, user lookup, AI config (if not cached), and zodiac lookup in parallel
+    const dbQueries = [
+      // Get chat details
+      prisma.chat.findFirst({
+        where: { id: chatId, userId },
+      }),
+      // Check user's query count before processing (skip for premium users)
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { queryCount: true },
+      }),
+      // Get AI config from cache or database
+      aiConfig
+        ? Promise.resolve(aiConfig)
+        : prisma.aIConfig.findFirst({
+            select: { systemPrompt: true, systemPromptActive: true, id: true },
+          }).then((config) => {
+            // Cache the AI config for 5 minutes
+            if (config) {
+              cacheService.set(AI_CONFIG_CACHE_KEY, config, 5 * 60 * 1000);
+            }
+            return config;
+          }),
+      // Inject zodiac from user's birthday (fetch early for later use)
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { dateOfBirth: true },
+      }),
+    ];
 
+    const [chat, userForQueryCheck, fetchedAiConfig, userForZodiac] = await Promise.all(dbQueries);
+    
+    // Use fetched AI config (either from cache or database)
+    aiConfig = fetchedAiConfig;
+
+    // Validate chat exists
     if (!chat) {
       throw new AppError("Chat not found.", HttpStatusCodes.NOT_FOUND);
     }
 
-    // Check user's query count before processing (skip for premium users)
-    const userForQueryCheck = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { queryCount: true },
-    });
-
+    // Validate user exists
     if (!userForQueryCheck) {
       throw new AppError("User not found.", HttpStatusCodes.NOT_FOUND);
     }
@@ -587,14 +686,27 @@ class ChatService {
         content: msg.content,
       }));
 
-    // Get system prompt from AI Config table (database) - priority over chat.systemPrompt
+    // System prompt and AI config already fetched in parallel above
     let systemPromptToUse = null;
-    const aiConfig = await prisma.aIConfig.findFirst({
-      select: { systemPrompt: true, systemPromptActive: true, id: true },
-    });
 
     // Safety flag to disable vector-based prompt replacement for stability
     const DISABLE_VECTOR_RETRIEVAL = false;
+    
+    // OPTIMIZATION: Timeout for Vector DB operations (1 second max)
+    const VECTOR_DB_TIMEOUT_MS = 1000;
+    
+    // Helper function to add timeout to promises
+    const withTimeout = (promise, timeoutMs, operationName) => {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error(`${operationName} timed out after ${timeoutMs}ms`)),
+            timeoutMs
+          )
+        ),
+      ]);
+    };
 
     // Try to get relevant prompt chunks from Supabase Vector DB
     let usingVectorDB = false;
@@ -606,24 +718,50 @@ class ChatService {
     console.log(`📋 systemPrompt exists: ${!!aiConfig?.systemPrompt}`);
     console.log(`📋 User message: "${content?.substring(0, 50)}..."`);
     console.log(`🔒 DISABLE_VECTOR_RETRIEVAL: ${DISABLE_VECTOR_RETRIEVAL}`);
+    console.log(`⏱️  Vector DB Timeout: ${VECTOR_DB_TIMEOUT_MS}ms`);
 
     if (!DISABLE_VECTOR_RETRIEVAL && aiConfig?.systemPromptActive && aiConfig?.systemPrompt && content) {
       try {
         const SupabaseVectorService = require("./supabaseVector.service");
-        const hasChunks = await SupabaseVectorService.hasChunks();
-        const chunkCount = await SupabaseVectorService.getChunkCount();
+        
+        // OPTIMIZATION: Add timeout to vector DB checks
+        const [hasChunks, chunkCount] = await Promise.all([
+          withTimeout(
+            SupabaseVectorService.hasChunks(),
+            VECTOR_DB_TIMEOUT_MS,
+            'hasChunks check'
+          ).catch(() => {
+            console.warn('⚠️  Vector DB hasChunks check timed out, assuming no chunks');
+            return false;
+          }),
+          withTimeout(
+            SupabaseVectorService.getChunkCount(),
+            VECTOR_DB_TIMEOUT_MS,
+            'getChunkCount check'
+          ).catch(() => {
+            console.warn('⚠️  Vector DB getChunkCount check timed out, assuming 0 chunks');
+            return 0;
+          }),
+        ]);
         
         console.log(`\n🗄️  Supabase Vector DB Check:`);
         console.log(`   Has chunks: ${hasChunks}`);
         console.log(`   Total active chunks: ${chunkCount}`);
         
         if (hasChunks) {
-          // Get relevant context from Supabase Vector DB
-          const relevantContext = await SupabaseVectorService.getRelevantPromptContext(
-            content,
-            3,    // topK: Get top 3 most relevant chunks
-            0.3   // minSimilarity: Minimum 30% similarity (lowered for broader matching)
-          );
+          // OPTIMIZATION: Add timeout to vector context retrieval
+          const relevantContext = await withTimeout(
+            SupabaseVectorService.getRelevantPromptContext(
+              content,
+              3,    // topK: Get top 3 most relevant chunks
+              0.3   // minSimilarity: Minimum 30% similarity (lowered for broader matching)
+            ),
+            VECTOR_DB_TIMEOUT_MS,
+            'getRelevantPromptContext'
+          ).catch((error) => {
+            console.warn(`⚠️  Vector DB context retrieval timed out or failed: ${error.message}`);
+            return null;
+          });
 
           if (relevantContext) {
             systemPromptToUse = `
@@ -689,43 +827,20 @@ Use this context to provide accurate and helpful responses to the user's questio
       }
     }
 
-    // Add system prompt to messages
+    // Add system prompt to messages with optimization
     if (systemPromptToUse) {
+      // OPTIMIZATION: Use shorter prompt for simple queries
+      const optimizedPrompt = getOptimalPrompt(content, systemPromptToUse);
+      console.log(`🚀 PROMPT OPTIMIZATION: ${optimizedPrompt.length} chars vs ${systemPromptToUse.length} chars (${((1 - optimizedPrompt.length / systemPromptToUse.length) * 100).toFixed(1)}% reduction)`);
+      
       messages.unshift({
         role: "system",
-        content: systemPromptToUse,
+        content: optimizedPrompt,
       });
     }
 
-    // Debug logging for prompt composition (gated by environment variable)
-    if (process.env.DEBUG_RAG_PROMPT === 'true') {
-      try {
-        const baseSystemPromptSource = aiConfig?.systemPrompt ? "ai-config" : 
-                                     chat.systemPrompt ? "chat-specific" : "none";
-        const baseSystemPromptLength = (aiConfig?.systemPrompt || chat.systemPrompt || "").length;
-        const finalSystemPromptLength = systemPromptToUse ? systemPromptToUse.length : 0;
-        
-        Logger.info("RAG Prompt Composition Debug", {
-          chatId,
-          userId,
-          vectorRetrievalUsed: usingVectorDB,
-          baseSystemPromptSource,
-          baseSystemPromptLength,
-          retrievalContextAppended: usingVectorDB,
-          finalSystemPromptLength,
-          DISABLE_VECTOR_RETRIEVAL,
-        });
-      } catch (debugError) {
-        // Non-blocking debug logging error
-        console.error("Debug logging error (non-critical):", debugError);
-      }
-    }
-
-    // Inject zodiac from user's birthday
-    const userForZodiac = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { dateOfBirth: true },
-    });
+    // Inject zodiac from user's birthday (already fetched in parallel above)
+    // NOTE: This is needed for OpenAI call, so it must happen before
     const zodiac = getZodiacSign(userForZodiac?.dateOfBirth);
     if (zodiac) {
       messages.unshift({ role: "system", content: `User Zodiac: ${zodiac} ` });
@@ -737,16 +852,15 @@ Use this context to provide accurate and helpful responses to the user's questio
       });
     }
 
-    // Log all system prompts being used
-    const systemPrompts = messages
-      .filter((msg) => msg.role === "system")
-      .map((msg) => msg.content);
-    
-    Logger.info("System Prompts Being Used", {
+    // OPTIMIZATION: Store logging data for later (non-blocking)
+    // These logging operations will be executed after OpenAI response
+    const loggingData = {
       chatId,
       userId,
-      systemPrompts: systemPrompts,
-      systemPromptCount: systemPrompts.length,
+      systemPrompts: messages
+        .filter((msg) => msg.role === "system")
+        .map((msg) => msg.content),
+      systemPromptCount: messages.filter((msg) => msg.role === "system").length,
       mainSystemPrompt: systemPromptToUse || "No system prompt set",
       promptSource: aiConfig?.systemPrompt ? "ai-config-table" : (chat.systemPrompt ? "chat-specific" : "none"),
       aiConfigPrompt: aiConfig?.systemPrompt || null,
@@ -754,20 +868,15 @@ Use this context to provide accurate and helpful responses to the user's questio
       chatSystemPrompt: chat.systemPrompt || null,
       zodiac: zodiac || null,
       birthdate: userForZodiac?.dateOfBirth || null,
-    });
-
-    // Log full messages array (for debugging)
-    Logger.debug("Full Messages Array Being Sent to OpenAI", {
-      chatId,
-      messageCount: messages.length,
-      messages: messages.map((msg) => ({
+      vectorRetrievalUsed: usingVectorDB,
+      messagesPreview: messages.map((msg) => ({
         role: msg.role,
         contentLength: msg.content?.length || 0,
         contentPreview: msg.role === "system" 
           ? msg.content?.substring(0, 200) + (msg.content?.length > 200 ? "..." : "")
           : msg.content?.substring(0, 100) + (msg.content?.length > 100 ? "..." : ""),
       })),
-    });
+    };
 
     let aiResponse = null;
     let tokensUsed = 0;
@@ -775,6 +884,58 @@ Use this context to provide accurate and helpful responses to the user's questio
 
     try {
       const startTime = Date.now();
+
+      // OPTIMIZATION: Check cache for similar queries (only for text messages)
+      if (!imageFile && !audioFile && !videoFile && content && content.trim().length > 0) {
+        const cachedResponse = await responseCacheService.getCachedResponse(
+          content,
+          chatId,
+          userId
+        );
+
+        if (cachedResponse) {
+          // Use cached response
+          processingTime = 10; // Cache lookup is very fast
+          tokensUsed = 0; // No tokens used for cached response
+          const aiContent = cachedResponse.content;
+
+          if (aiContent) {
+            aiResponse = await prisma.message.create({
+              data: {
+                content: aiContent,
+                type: "TEXT",
+                chatId,
+                senderId: userId,
+                isFromAI: true,
+                aiModel: chat.aiModel,
+                tokensUsed: 0,
+                processingTime: 10,
+              },
+            });
+          }
+
+          // Update chat metadata
+          await prisma.chat.update({
+            where: { id: chatId },
+            data: {
+              lastMessageAt: new Date(),
+              lastMessage: aiResponse?.content || userMessage.content,
+              messageCount: { increment: 2 },
+            },
+          });
+
+          return {
+            message: "Message sent successfully (from cache).",
+            success: true,
+            data: {
+              userMessage,
+              aiResponse,
+              fromCache: true,
+              similarity: cachedResponse.similarity,
+            },
+          };
+        }
+      }
 
       // Call OpenAI API based on message type
       let completion;
@@ -843,17 +1004,21 @@ Use this context to provide accurate and helpful responses to the user's questio
           ...getMaxTokenParam(chat.aiModel),
         });
       } else {
-        // Regular text completion
+        // Regular text completion with model optimization
         messages.push({
           role: "user",
           content: content,
         });
 
+        // OPTIMIZATION: Select optimal model based on query complexity
+        const selectedModel = getOptimalModel(content, chat.aiModel);
+        console.log(`🚀 MODEL OPTIMIZATION: Using ${selectedModel} for query length: ${content?.length} chars`);
+
         completion = await openai.chat.completions.create({
-          model: chat.aiModel,
+          model: selectedModel, // Optimized model selection
           messages: messages,
           temperature: chat.temperature,
-          ...getMaxTokenParam(chat.aiModel),
+          ...getMaxTokenParam(selectedModel), // Use selected model for token params
         });
       }
 
@@ -875,7 +1040,82 @@ Use this context to provide accurate and helpful responses to the user's questio
             processingTime,
           },
         });
+
+        // OPTIMIZATION: Cache the response for future similar queries
+        // Only cache text responses (not media)
+        if (!imageFile && !audioFile && !videoFile && content && content.trim().length > 0) {
+          // Cache in background (non-blocking)
+          setImmediate(async () => {
+            try {
+              await responseCacheService.setCachedResponse(
+                content,
+                chatId,
+                userId,
+                {
+                  content: aiContent,
+                  aiModel: chat.aiModel,
+                  tokensUsed,
+                  processingTime,
+                }
+              );
+            } catch (cacheError) {
+              // Non-critical - don't affect user experience
+              console.error("Error caching response:", cacheError);
+            }
+          });
+        }
       }
+
+      // OPTIMIZATION: Execute non-critical logging operations after OpenAI response
+      // This doesn't block the response from being sent to the user
+      setImmediate(() => {
+        try {
+          // Log all system prompts being used
+          Logger.info("System Prompts Being Used", {
+            chatId: loggingData.chatId,
+            userId: loggingData.userId,
+            systemPrompts: loggingData.systemPrompts,
+            systemPromptCount: loggingData.systemPromptCount,
+            mainSystemPrompt: loggingData.mainSystemPrompt,
+            promptSource: loggingData.promptSource,
+            aiConfigPrompt: loggingData.aiConfigPrompt,
+            aiConfigActive: loggingData.aiConfigActive,
+            chatSystemPrompt: loggingData.chatSystemPrompt,
+            zodiac: loggingData.zodiac,
+            birthdate: loggingData.birthdate,
+          });
+
+          // Log full messages array (for debugging)
+          Logger.debug("Full Messages Array Being Sent to OpenAI", {
+            chatId: loggingData.chatId,
+            messageCount: loggingData.messagesPreview.length,
+            messages: loggingData.messagesPreview,
+          });
+
+          // Debug logging for prompt composition (gated by environment variable)
+          if (process.env.DEBUG_RAG_PROMPT === 'true') {
+            const baseSystemPromptSource = loggingData.aiConfigPrompt ? "ai-config" : 
+                                         loggingData.chatSystemPrompt ? "chat-specific" : "none";
+            const baseSystemPromptLength = (loggingData.aiConfigPrompt || loggingData.chatSystemPrompt || "").length;
+            const finalSystemPromptLength = loggingData.mainSystemPrompt !== "No system prompt set" 
+              ? loggingData.mainSystemPrompt.length : 0;
+            
+            Logger.info("RAG Prompt Composition Debug", {
+              chatId: loggingData.chatId,
+              userId: loggingData.userId,
+              vectorRetrievalUsed: loggingData.vectorRetrievalUsed,
+              baseSystemPromptSource,
+              baseSystemPromptLength,
+              retrievalContextAppended: loggingData.vectorRetrievalUsed,
+              finalSystemPromptLength,
+              DISABLE_VECTOR_RETRIEVAL,
+            });
+          }
+        } catch (loggingError) {
+          // Non-blocking logging error - don't affect user experience
+          console.error("Logging error (non-critical):", loggingError);
+        }
+      });
     } catch (error) {
       console.error("OpenAI API Error:", error);
       console.error("Error details:", {
@@ -952,6 +1192,239 @@ Use this context to provide accurate and helpful responses to the user's questio
         aiResponse,
       },
     };
+  }
+
+  /**
+   * Send message to AI and stream response in real-time
+   * OPTIMIZATION: Streams response as it's generated for better UX
+   */
+  static async sendMessageStream(chatId, userId, data, res) {
+    const { content, replyToId, imageFile, audioFile, videoFile } = data;
+
+    try {
+      // Set up Server-Sent Events headers
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+
+      // Send initial connection message
+      res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
+
+      // OPTIMIZATION: Check cache for AI config first
+      const AI_CONFIG_CACHE_KEY = "ai_config";
+      let aiConfig = cacheService.get(AI_CONFIG_CACHE_KEY);
+      
+      // OPTIMIZATION: Parallelize independent database queries
+      const dbQueries = [
+        prisma.chat.findFirst({
+          where: { id: chatId, userId },
+        }),
+        prisma.user.findUnique({
+          where: { id: userId },
+          select: { queryCount: true },
+        }),
+        aiConfig
+          ? Promise.resolve(aiConfig)
+          : prisma.aIConfig.findFirst({
+              select: { systemPrompt: true, systemPromptActive: true, id: true },
+            }).then((config) => {
+              if (config) {
+                cacheService.set(AI_CONFIG_CACHE_KEY, config, 5 * 60 * 1000);
+              }
+              return config;
+            }),
+        prisma.user.findUnique({
+          where: { id: userId },
+          select: { dateOfBirth: true },
+        }),
+      ];
+
+      const [chat, userForQueryCheck, fetchedAiConfig, userForZodiac] = await Promise.all(dbQueries);
+      aiConfig = fetchedAiConfig;
+
+      if (!chat) {
+        res.write(`data: ${JSON.stringify({ type: 'error', message: 'Chat not found' })}\n\n`);
+        res.end();
+        return;
+      }
+
+      if (!userForQueryCheck) {
+        res.write(`data: ${JSON.stringify({ type: 'error', message: 'User not found' })}\n\n`);
+        res.end();
+        return;
+      }
+
+      // Check subscription and query count
+      const subscriptionCheck = await RevenueCatService.getActiveSubscription(userId);
+      const hasActiveSubscription = subscriptionCheck.hasActiveSubscription;
+
+      if (!hasActiveSubscription) {
+        if (userForQueryCheck.queryCount <= 0) {
+          res.write(`data: ${JSON.stringify({ type: 'error', message: 'You have reached your free query limit. Please upgrade to continue.' })}\n\n`);
+          res.end();
+          return;
+        }
+        await prisma.user.update({
+          where: { id: userId },
+          data: { queryCount: { decrement: 1 } },
+        });
+      }
+
+      // Handle file uploads (for now, streaming only supports text - can extend later)
+      if (imageFile || audioFile || videoFile) {
+        res.write(`data: ${JSON.stringify({ type: 'error', message: 'Streaming not yet supported for media files. Use regular endpoint.' })}\n\n`);
+        res.end();
+        return;
+      }
+
+      // Create user message
+      const userMessage = await prisma.message.create({
+        data: {
+          content,
+          type: "TEXT",
+          chatId,
+          senderId: userId,
+          replyToId,
+          isFromAI: false,
+        },
+      });
+
+      // Send user message confirmation
+      res.write(`data: ${JSON.stringify({ type: 'user_message', messageId: userMessage.id })}\n\n`);
+
+      // Prepare messages for OpenAI context
+      const previousMessages = await prisma.message.findMany({
+        where: { chatId },
+        orderBy: { createdAt: "asc" },
+        take: 20,
+      });
+
+      const messages = previousMessages
+        .filter((msg) => msg.content && msg.content.trim().length > 0)
+        .map((msg) => ({
+          role: msg.isFromAI ? "assistant" : "user",
+          content: msg.content,
+        }));
+
+      // Add system prompt with optimization
+      let systemPromptToUse = null;
+      if (aiConfig?.systemPrompt) {
+        systemPromptToUse = aiConfig.systemPrompt;
+      } else if (chat.systemPrompt) {
+        systemPromptToUse = chat.systemPrompt;
+      }
+
+      if (systemPromptToUse) {
+        // OPTIMIZATION: Use shorter prompt for simple queries in streaming too
+        const optimizedPrompt = getOptimalPrompt(content, systemPromptToUse);
+        console.log(`🚀 STREAMING PROMPT OPTIMIZATION: ${optimizedPrompt.length} chars vs ${systemPromptToUse.length} chars`);
+        
+        messages.unshift({
+          role: "system",
+          content: optimizedPrompt,
+        });
+      }
+
+      // Add zodiac
+      const zodiac = getZodiacSign(userForZodiac?.dateOfBirth);
+      if (zodiac) {
+        messages.unshift({ role: "system", content: `User Zodiac: ${zodiac} ` });
+      }
+      if (userForZodiac?.dateOfBirth) {
+        messages.unshift({
+          role: "system",
+          content: `User Birthdate: ${userForZodiac.dateOfBirth}`,
+        });
+      }
+
+      // Add current user message
+      messages.push({
+        role: "user",
+        content: content,
+      });
+
+      // Send processing started message
+      res.write(`data: ${JSON.stringify({ type: 'processing' })}\n\n`);
+
+      // Call OpenAI with streaming and model optimization
+      const startTime = Date.now();
+      let fullResponse = '';
+      let tokensUsed = 0;
+
+      // OPTIMIZATION: Select optimal model for streaming too
+      const selectedModel = getOptimalModel(content, chat.aiModel);
+      console.log(`🚀 STREAMING MODEL OPTIMIZATION: Using ${selectedModel} for query length: ${content?.length} chars`);
+
+      const stream = await openai.chat.completions.create({
+        model: selectedModel, // Optimized model selection
+        messages: messages,
+        temperature: chat.temperature,
+        stream: true, // Enable streaming
+        ...getMaxTokenParam(selectedModel), // Use selected model for token params
+      });
+
+      // Stream chunks to client
+      for await (const chunk of stream) {
+        const content = chunk.choices[0]?.delta?.content || '';
+        if (content) {
+          fullResponse += content;
+          // Send chunk to client
+          res.write(`data: ${JSON.stringify({ type: 'chunk', content })}\n\n`);
+        }
+
+        // Track token usage if available
+        if (chunk.usage) {
+          tokensUsed = chunk.usage.total_tokens || 0;
+        }
+      }
+
+      const processingTime = Date.now() - startTime;
+
+      // Save complete response to database
+      let aiResponse = null;
+      if (fullResponse) {
+        aiResponse = await prisma.message.create({
+          data: {
+            content: fullResponse,
+            type: "TEXT",
+            chatId,
+            senderId: userId,
+            isFromAI: true,
+            aiModel: chat.aiModel,
+            tokensUsed,
+            processingTime,
+          },
+        });
+      }
+
+      // Update chat metadata
+      await prisma.chat.update({
+        where: { id: chatId },
+        data: {
+          lastMessageAt: new Date(),
+          lastMessage: fullResponse || userMessage.content,
+          messageCount: { increment: 2 },
+        },
+      });
+
+      // Send completion message
+      res.write(`data: ${JSON.stringify({ 
+        type: 'done', 
+        messageId: aiResponse?.id,
+        tokensUsed,
+        processingTime 
+      })}\n\n`);
+
+      res.end();
+    } catch (error) {
+      console.error("Streaming error:", error);
+      res.write(`data: ${JSON.stringify({ 
+        type: 'error', 
+        message: error.message || 'An error occurred while processing your request' 
+      })}\n\n`);
+      res.end();
+    }
   }
 
   /**
