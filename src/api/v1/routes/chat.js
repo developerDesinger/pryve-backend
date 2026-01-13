@@ -87,6 +87,29 @@ router.post(
   },
   ChatController.sendMessage
 );
+
+// OPTIMIZATION: Streaming endpoint for real-time AI responses
+// POST /api/v1/chats/:chatId/messages/stream
+router.post(
+  "/:chatId/messages/stream",
+  isAuthenticated,
+  (req, res, next) => {
+    // Handle file uploads (though streaming currently only supports text)
+    upload.single("file")(req, res, (err) => {
+      if (err) {
+        res.write(`data: ${JSON.stringify({ 
+          type: 'error', 
+          message: err.message 
+        })}\n\n`);
+        res.end();
+        return;
+      }
+      next();
+    });
+  },
+  ChatController.sendMessageStream
+);
+
 router.get(
   "/:chatId/messages",
   isAuthenticated,

@@ -87,6 +87,38 @@ class ChatController {
   });
 
   /**
+   * Send message to AI and stream response in real-time
+   * POST /api/v1/chats/:chatId/messages/stream
+   * OPTIMIZATION: Streams response as it's generated for better UX
+   */
+  static sendMessageStream = catchAsyncHandler(async (req, res) => {
+    const { id: userId } = req.user;
+    const { chatId } = req.params;
+
+    // Check for multer errors
+    if (req.fileValidationError) {
+      res.write(`data: ${JSON.stringify({ 
+        type: 'error', 
+        message: req.fileValidationError 
+      })}\n\n`);
+      res.end();
+      return;
+    }
+
+    // Handle message data
+    const messageData = {
+      content: req.body.content,
+      replyToId: req.body.replyToId,
+      imageFile: req.files?.image?.[0] || req.file,
+      audioFile: req.files?.audio?.[0],
+      videoFile: req.files?.video?.[0],
+    };
+
+    // Call streaming service
+    await ChatService.sendMessageStream(chatId, userId, messageData, res);
+  });
+
+  /**
    * Get messages for a chat
    * GET /api/v1/chats/:chatId/messages
    */
