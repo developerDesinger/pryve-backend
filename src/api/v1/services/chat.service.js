@@ -517,16 +517,21 @@ class ChatService {
     let aiConfig = cacheService.get(AI_CONFIG_CACHE_KEY);
     
     // OPTIMIZATION: Parallelize independent database queries
-    // Run chat lookup, user lookup, AI config (if not cached), and zodiac lookup in parallel
+    // OPTIMIZATION: Combine database queries into fewer round trips
     const dbQueries = [
-      // Get chat details
+      // Get chat details with related user data in one query
       prisma.chat.findFirst({
         where: { id: chatId, userId },
-      }),
-      // Check user's query count before processing (skip for premium users)
-      prisma.user.findUnique({
-        where: { id: userId },
-        select: { queryCount: true },
+        include: {
+          user: {
+            select: { 
+              queryCount: true, 
+              dateOfBirth: true,
+              id: true,
+              email: true
+            }
+          }
+        }
       }),
       // Get AI config from cache or database
       aiConfig
@@ -540,22 +545,22 @@ class ChatService {
             }
             return config;
           }),
-      // Inject zodiac from user's birthday (fetch early for later use)
-      prisma.user.findUnique({
-        where: { id: userId },
-        select: { dateOfBirth: true },
-      }),
     ];
 
-    const [chat, userForQueryCheck, fetchedAiConfig, userForZodiac] = await Promise.all(dbQueries);
+    const [chatWithUser, fetchedAiConfig] = await Promise.all(dbQueries);
     
     // Use fetched AI config (either from cache or database)
     aiConfig = fetchedAiConfig;
 
     // Validate chat exists
-    if (!chat) {
+    if (!chatWithUser) {
       throw new AppError("Chat not found.", HttpStatusCodes.NOT_FOUND);
     }
+
+    // Extract chat and user data from combined query
+    const chat = chatWithUser;
+    const userForQueryCheck = chatWithUser.user;
+    const userForZodiac = chatWithUser.user;
 
     // Validate user exists
     if (!userForQueryCheck) {
@@ -670,9 +675,15 @@ class ChatService {
       });
     }
 
-    // Prepare messages for OpenAI context
+    // Prepare messages for OpenAI context - optimized query
     const previousMessages = await prisma.message.findMany({
       where: { chatId },
+      select: {
+        content: true,
+        isFromAI: true,
+        createdAt: true,
+        type: true
+      },
       orderBy: { createdAt: "asc" },
       take: 20, // Get last 20 messages for context
     });
@@ -1215,14 +1226,21 @@ Use this context to provide accurate and helpful responses to the user's questio
       const AI_CONFIG_CACHE_KEY = "ai_config";
       let aiConfig = cacheService.get(AI_CONFIG_CACHE_KEY);
       
-      // OPTIMIZATION: Parallelize independent database queries
+      // OPTIMIZATION: Combine database queries into fewer round trips
       const dbQueries = [
+        // Get chat details with related user data in one query
         prisma.chat.findFirst({
           where: { id: chatId, userId },
-        }),
-        prisma.user.findUnique({
-          where: { id: userId },
-          select: { queryCount: true },
+          include: {
+            user: {
+              select: { 
+                queryCount: true, 
+                dateOfBirth: true,
+                id: true,
+                email: true
+              }
+            }
+          }
         }),
         aiConfig
           ? Promise.resolve(aiConfig)
@@ -1234,20 +1252,21 @@ Use this context to provide accurate and helpful responses to the user's questio
               }
               return config;
             }),
-        prisma.user.findUnique({
-          where: { id: userId },
-          select: { dateOfBirth: true },
-        }),
       ];
 
-      const [chat, userForQueryCheck, fetchedAiConfig, userForZodiac] = await Promise.all(dbQueries);
+      const [chatWithUser, fetchedAiConfig] = await Promise.all(dbQueries);
       aiConfig = fetchedAiConfig;
 
-      if (!chat) {
+      if (!chatWithUser) {
         res.write(`data: ${JSON.stringify({ type: 'error', message: 'Chat not found' })}\n\n`);
         res.end();
         return;
       }
+
+      // Extract chat and user data from combined query
+      const chat = chatWithUser;
+      const userForQueryCheck = chatWithUser.user;
+      const userForZodiac = chatWithUser.user;
 
       if (!userForQueryCheck) {
         res.write(`data: ${JSON.stringify({ type: 'error', message: 'User not found' })}\n\n`);
@@ -1293,9 +1312,77 @@ Use this context to provide accurate and helpful responses to the user's questio
       // Send user message confirmation
       res.write(`data: ${JSON.stringify({ type: 'user_message', messageId: userMessage.id })}\n\n`);
 
-      // Prepare messages for OpenAI context
+      // OPTIMIZATION: Check cache for similar queries before calling OpenAI
+      if (content && content.trim().length > 0) {
+        const cachedResponse = await responseCacheService.getCachedResponse(
+          content,
+          chatId,
+          userId
+        );
+
+        if (cachedResponse && cachedResponse.content) {
+          // Use cached response for streaming
+          console.log(`✅ Cache hit! Using cached response for streaming`);
+          
+          // Stream the cached response in chunks for better UX
+          const cachedContent = cachedResponse.content;
+          const chunkSize = 20; // Characters per chunk
+          
+          for (let i = 0; i < cachedContent.length; i += chunkSize) {
+            const chunk = cachedContent.substring(i, i + chunkSize);
+            res.write(`data: ${JSON.stringify({ type: 'chunk', content: chunk })}\n\n`);
+            // Small delay to simulate streaming
+            await new Promise(resolve => setTimeout(resolve, 10));
+          }
+
+          // Save cached response as AI message
+          const aiResponse = await prisma.message.create({
+            data: {
+              content: cachedContent,
+              type: "TEXT",
+              chatId,
+              senderId: userId,
+              isFromAI: true,
+              aiModel: chat.aiModel,
+              tokensUsed: 0,
+              processingTime: 10,
+            },
+          });
+
+          // Update chat metadata
+          await prisma.chat.update({
+            where: { id: chatId },
+            data: {
+              lastMessageAt: new Date(),
+              lastMessage: cachedContent,
+              messageCount: { increment: 2 },
+            },
+          });
+
+          // Send completion message
+          res.write(`data: ${JSON.stringify({ 
+            type: 'done', 
+            messageId: aiResponse.id,
+            tokensUsed: 0,
+            processingTime: 10,
+            fromCache: true,
+            similarity: cachedResponse.similarity
+          })}\n\n`);
+
+          res.end();
+          return;
+        }
+      }
+
+      // Prepare messages for OpenAI context - optimized query
       const previousMessages = await prisma.message.findMany({
         where: { chatId },
+        select: {
+          content: true,
+          isFromAI: true,
+          createdAt: true,
+          type: true
+        },
         orderBy: { createdAt: "asc" },
         take: 20,
       });
@@ -1407,6 +1494,29 @@ Use this context to provide accurate and helpful responses to the user's questio
           messageCount: { increment: 2 },
         },
       });
+
+      // OPTIMIZATION: Cache the streaming response for future similar queries
+      if (content && content.trim().length > 0 && fullResponse) {
+        // Cache in background (non-blocking)
+        setImmediate(async () => {
+          try {
+            await responseCacheService.setCachedResponse(
+              content,
+              chatId,
+              userId,
+              {
+                content: fullResponse,
+                aiModel: selectedModel,
+                tokensUsed,
+                processingTime,
+              }
+            );
+          } catch (cacheError) {
+            // Non-critical - don't affect user experience
+            console.error("Error caching streaming response:", cacheError);
+          }
+        });
+      }
 
       // Send completion message
       res.write(`data: ${JSON.stringify({ 
