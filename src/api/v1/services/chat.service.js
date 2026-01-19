@@ -245,151 +245,30 @@ const buildSecondaryTags = (msg) => {
 const deriveGoalsFromActivity = (messages, favorites = []) => {
   const goals = [];
 
-  const reflections = messages.filter(
-    (msg) => msg.chat?.type === "PERSONAL_AI"
-  );
-  const streak = consecutiveWindow(
-    reflections.map((msg) => msg.createdAt),
-    7
-  );
+  // SIMPLIFIED: Check for goal-related keywords in favorited messages
+  const goalKeywords = [
+    'goal', 'achieve', 'achieved', 'accomplish', 'accomplished', 'complete', 'completed',
+    'finish', 'finished', 'success', 'successful', 'target', 'milestone', 'progress',
+    'improvement', 'better', 'growth', 'learning', 'mastered', 'overcome', 'breakthrough'
+  ];
 
-  if (streak) {
-    const highlight = reflections.find(
-      (msg) => toDateKey(msg.createdAt) === toDateKey(streak.end)
-    );
-
-    goals.push({
-      id: "goal_consistency",
-      title: "Started journaling daily.",
-      summary: "Logged reflections 7 days in a row.",
-      themes: ["Reflection", "Resilience"],
-      startedAt: streak.start,
-      completedAt: streak.end,
-      highlight,
-    });
-  }
-
-  const connectionMessages = messages.filter((msg) => {
-    const emotion = msg.emotion?.toLowerCase();
-    return (
-      msg.chat?.type === "CONVERSATION" &&
-      (emotion === "joy" || emotion === "surprise") &&
-      msg.emotionConfidence >= 0.7
-    );
+  const goalMessages = messages.filter(msg => {
+    const content = msg.content?.toLowerCase() || '';
+    return goalKeywords.some(keyword => content.includes(keyword));
   });
 
-  if (connectionMessages.length >= 3) {
-    for (let i = 0; i < connectionMessages.length; i++) {
-      const start = new Date(connectionMessages[i].createdAt);
-      const windowEnd = new Date(start.getTime() + 30 * MS_PER_DAY);
-      let count = 1;
-      let last = connectionMessages[i];
-
-      for (let j = i + 1; j < connectionMessages.length; j++) {
-        const currentDate = new Date(connectionMessages[j].createdAt);
-        if (currentDate <= windowEnd) {
-          count += 1;
-          last = connectionMessages[j];
-        } else {
-          break;
-        }
-      }
-
-      if (count >= 3) {
-        goals.push({
-          id: "goal_connection",
-          title: "Reached out to a friend.",
-          summary: "Shared 3 uplifting conversations within 30 days.",
-          themes: ["Courage", "Connection"],
-          startedAt: start,
-          completedAt: new Date(last.createdAt),
-          highlight: last,
-        });
-        break;
-      }
-    }
-  }
-
-  const boundaryTriggers = messages.filter((msg) => {
-    const emotion = msg.emotion?.toLowerCase();
-    return (
-      (emotion === "anger" || emotion === "fear") &&
-      msg.emotionConfidence >= 0.8
-    );
+  // Create a goal for each message containing goal keywords
+  goalMessages.forEach((msg, index) => {
+    goals.push({
+      id: `goal_simple_${index}`,
+      title: "Personal Achievement",
+      summary: msg.content.substring(0, 100) + (msg.content.length > 100 ? '...' : ''),
+      themes: ["Achievement", "Growth"],
+      startedAt: msg.createdAt,
+      completedAt: msg.createdAt,
+      highlight: msg,
+    });
   });
-
-  for (const trigger of boundaryTriggers) {
-    const start = new Date(trigger.createdAt);
-    const windowEnd = new Date(start.getTime() + 14 * MS_PER_DAY);
-    const followUps = messages.filter((msg) => {
-      const date = new Date(msg.createdAt);
-      const emotion = msg.emotion?.toLowerCase();
-      return (
-        date > start &&
-        date <= windowEnd &&
-        (emotion === "joy" || emotion === "surprise")
-      );
-    });
-
-    if (followUps.length >= 2) {
-      const last = followUps[followUps.length - 1];
-      goals.push({
-        id: "goal_boundaries",
-        title: "Implemented new boundaries.",
-        summary: "Turned tough emotions into empowered action.",
-        themes: ["Development", "Confidence"],
-        startedAt: start,
-        completedAt: new Date(last.createdAt),
-        highlight: last,
-      });
-      break;
-    }
-  }
-
-  const voiceWeeks = new Map();
-  messages
-    .filter((msg) => msg.chat?.type === "VOICE_NOTE")
-    .forEach((msg) => {
-      const key = getWeekKey(msg.createdAt);
-      if (!voiceWeeks.has(key)) voiceWeeks.set(key, msg);
-    });
-
-  if (voiceWeeks.size >= 3) {
-    const weeks = Array.from(voiceWeeks.values()).sort(
-      (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
-    );
-    const last = weeks[weeks.length - 1];
-    goals.push({
-      id: "goal_meditation",
-      title: "Set a weekly meditation practice.",
-      summary: "Voice notes became a steady mindfulness ritual.",
-      themes: ["Routine", "Peace"],
-      startedAt: new Date(weeks[0].createdAt),
-      completedAt: new Date(last.createdAt),
-      highlight: last,
-    });
-  }
-
-  if (favorites.length >= 5) {
-    const newest = new Date(favorites[0].createdAt);
-    const oldest = new Date(favorites[favorites.length - 1].createdAt);
-    const highlight = favorites[0].message;
-    goals.push({
-      id: "goal_learning",
-      title: "Finished a course.",
-      summary: "Saved 5 insights worth remembering.",
-      themes: ["Growth", "Learning"],
-      startedAt: oldest,
-      completedAt: newest,
-      highlight,
-    });
-  }
-
-  goals.sort(
-    (a, b) =>
-      new Date(b.completedAt || b.startedAt) -
-      new Date(a.completedAt || a.startedAt)
-  );
 
   return goals;
 };
@@ -2812,10 +2691,9 @@ Use this context to provide accurate and helpful responses to the user's questio
       );
       const goalsAchieved = derivedGoals.length;
 
-      // Process Heart-to-Hearts: Group favorited messages by chat
+      // Process Heart-to-Hearts: SIMPLIFIED - Only need 1 favorited message per chat
       const chatFavoritesMap = new Map();
       favoritedMessages
-        .filter(msg => msg.emotionConfidence >= 0.6)
         .forEach(msg => {
           const chatId = msg.chat?.id;
           if (chatId) {
@@ -2836,9 +2714,9 @@ Use this context to provide accurate and helpful responses to the user's questio
           }
         });
 
-      // Filter chats with >= 3 favorited emotional messages
+      // SIMPLIFIED: Filter chats with >= 1 favorited message (instead of 3)
       const heartToHeartsQualified = Array.from(chatFavoritesMap.values())
-        .filter(chat => chat.count >= 3)
+        .filter(chat => chat.count >= 1)
         .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
       
       const heartToHearts = heartToHeartsQualified.length;
@@ -2852,11 +2730,10 @@ Use this context to provide accurate and helpful responses to the user's questio
           lastUpdatedAt: chat.updatedAt,
         }));
 
-      // Process Growth Moments: Only favorited messages with joy/surprise
+      // SIMPLIFIED: Growth Moments - Any favorited message with positive emotions
       const growthMomentsFavorited = favoritedMessages.filter(
         msg => 
-          ["joy", "surprise"].includes(msg.emotion) && 
-          msg.emotionConfidence >= 0.7
+          ["joy", "surprise", "love", "gratitude", "excitement", "happiness", "contentment"].includes(msg.emotion)
       );
       
       growthMomentsCount = growthMomentsFavorited.length;
@@ -2875,10 +2752,8 @@ Use this context to provide accurate and helpful responses to the user's questio
           },
         }));
 
-      // Process Breakthrough Days: Group favorited messages by date
-      const breakthroughMessages = favoritedMessages.filter(
-        msg => msg.emotionConfidence >= 0.7
-      );
+      // SIMPLIFIED: Breakthrough Days - Any day with 3+ favorited messages
+      const breakthroughMessages = favoritedMessages;
 
       const dailyEmotions = {};
       breakthroughMessages.forEach((msg) => {
@@ -2890,13 +2765,13 @@ Use this context to provide accurate and helpful responses to the user's questio
           };
         }
         dailyEmotions[dateKey].count += 1;
-        if (["joy", "surprise"].includes(msg.emotion)) {
-          dailyEmotions[dateKey].positiveCount += 1;
-        }
+        // Count all favorited messages as positive
+        dailyEmotions[dateKey].positiveCount += 1;
       });
 
+      // SIMPLIFIED: Only need 3+ favorited messages in one day
       const breakthroughDays = Object.values(dailyEmotions).filter(
-        (day) => day.count >= 5 && day.positiveCount >= 2
+        (day) => day.count >= 3
       ).length;
 
       // Weekly Journey: Only count favorited messages
