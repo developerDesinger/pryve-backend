@@ -2273,15 +2273,23 @@ Use this context to provide accurate and helpful responses to the user's questio
     }
 
     if (normalized === "goals-achieved") {
-      // UPDATED: Get only FAVORITED emotional messages for goal derivation
+      // SIMPLE: Favorited messages that contain goal-related words
       const favorites = await prisma.userMessageFavorite.findMany({
         where: {
           userId,
           message: {
             isDeleted: false,
             isFromAI: false,
-            emotion: { not: null },
             chat: { userId, isDeleted: false },
+            OR: [
+              { content: { contains: "goal", mode: "insensitive" } },
+              { content: { contains: "achieve", mode: "insensitive" } },
+              { content: { contains: "complete", mode: "insensitive" } },
+              { content: { contains: "accomplish", mode: "insensitive" } },
+              { content: { contains: "success", mode: "insensitive" } },
+              { content: { contains: "finish", mode: "insensitive" } },
+              { content: { contains: "done", mode: "insensitive" } },
+            ],
           },
         },
         include: {
@@ -2292,44 +2300,30 @@ Use this context to provide accurate and helpful responses to the user's questio
           },
         },
         orderBy: { createdAt: "desc" },
-        take: 500,
+        take: Number(limit) || 20,
       });
 
-      // Filter to only emotional user messages
-      const emotionalMessages = favorites
-        .filter(fav => fav.message && !fav.message.isFromAI && fav.message.emotion)
-        .map(fav => fav.message);
-
-      const detectedGoals = deriveGoalsFromActivity(emotionalMessages, favorites);
-      const boundedGoals = detectedGoals.slice(0, Number(limit) || 20);
+      const goalMessages = favorites.map(fav => fav.message).filter(Boolean);
 
       return {
         success: true,
         data: {
           category: normalized,
-          items: boundedGoals.map((goal) => ({
-            id: goal.id,
-            title: goal.title,
-            summary: goal.summary,
-            tags: goal.themes,
-            duration: formatDuration(goal.startedAt, goal.completedAt),
-            timestamp: goal.completedAt || goal.startedAt,
-            emotion: goal.highlight
-              ? {
-                  label: goal.highlight.emotion,
-                  confidence: goal.highlight.emotionConfidence,
-                }
-              : null,
-            highlightMessage: goal.highlight
-              ? {
-                  id: goal.highlight.id,
-                  content: goal.highlight.content,
-                  emotion: goal.highlight.emotion,
-                  emotionConfidence: goal.highlight.emotionConfidence,
-                  source: mapChatTypeToSource(goal.highlight.chat?.type),
-                  timestamp: goal.highlight.createdAt,
-                }
-              : null,
+          items: goalMessages.map((msg) => ({
+            id: msg.id,
+            title: createCleanTitle(msg.content),
+            primaryTag: msg.emotion ? mapEmotionToTag(msg.emotion, msg.emotionConfidence) : "Goal",
+            tags: buildSecondaryTags(msg),
+            source: mapChatTypeToSource(msg.chat?.type),
+            timestamp: msg.createdAt,
+            emotion: msg.emotion ? {
+              label: msg.emotion,
+              confidence: msg.emotionConfidence,
+            } : null,
+            chat: {
+              id: msg.chat?.id,
+              name: msg.chat?.name,
+            },
           })),
           nextCursor: null,
         },
@@ -2337,7 +2331,7 @@ Use this context to provide accurate and helpful responses to the user's questio
     }
 
     if (normalized === "growth-moments") {
-      // UPDATED: Get only FAVORITED growth messages
+      // SIMPLE: Favorited messages with positive emotions (joy, surprise)
       const favorites = await prisma.userMessageFavorite.findMany({
         where: {
           userId,
@@ -2345,7 +2339,6 @@ Use this context to provide accurate and helpful responses to the user's questio
             isDeleted: false,
             isFromAI: false,
             emotion: { in: ["joy", "surprise"] },
-            emotionConfidence: { gte: 0.7 },
             chat: { userId, isDeleted: false },
           },
         },
@@ -2388,8 +2381,7 @@ Use this context to provide accurate and helpful responses to the user's questio
     }
 
     if (normalized === "heart-to-hearts") {
-      // SIMPLIFIED: Get ALL favorited messages (no complex chat filtering)
-      // Heart-to-hearts now simply shows all favorited messages
+      // SIMPLE: If message is favorited, it appears in heart-to-hearts
       const favorites = await prisma.userMessageFavorite.findMany({
         where: {
           userId,
@@ -2410,10 +2402,9 @@ Use this context to provide accurate and helpful responses to the user's questio
         take: Number(limit) || 20,
       });
 
-      // Get all favorited messages (simplified logic)
       const heartToHeartMessages = favorites
         .map(fav => fav.message)
-        .filter(msg => msg !== null && msg !== undefined);
+        .filter(msg => msg !== null);
 
       return {
         success: true,
@@ -2441,7 +2432,7 @@ Use this context to provide accurate and helpful responses to the user's questio
     }
 
     if (normalized === "breakthrough-days") {
-      // UPDATED: Get only FAVORITED emotional messages with confidence >= 0.7
+      // SIMPLE: Favorited messages with strong emotions, grouped by day
       const favorites = await prisma.userMessageFavorite.findMany({
         where: {
           userId,
@@ -2449,7 +2440,6 @@ Use this context to provide accurate and helpful responses to the user's questio
             isDeleted: false,
             isFromAI: false,
             emotion: { not: null },
-            emotionConfidence: { gte: 0.7 },
             chat: { userId, isDeleted: false },
           },
         },
@@ -2461,80 +2451,31 @@ Use this context to provide accurate and helpful responses to the user's questio
           },
         },
         orderBy: { createdAt: "desc" },
+        take: Number(limit) || 20,
       });
 
-      const rawMessages = favorites.map(fav => fav.message).filter(Boolean);
-
-      const grouped = rawMessages.reduce((acc, msg) => {
-        const key = toDateKey(msg.createdAt);
-        if (!acc[key]) {
-          acc[key] = [];
-        }
-        acc[key].push(msg);
-        return acc;
-      }, {});
-
-      const items = Object.entries(grouped)
-        .map(([dateKey, list]) => {
-          const total = list.length;
-          const positive = list.filter((message) =>
-            ["joy", "surprise"].includes(message.emotion?.toLowerCase())
-          ).length;
-
-          if (
-            total < BREAKTHROUGH_MIN_TOTAL ||
-            positive < BREAKTHROUGH_MIN_POSITIVE
-          ) {
-            return null;
-          }
-
-          const highlight = list.reduce(
-            (best, current) =>
-              !best || current.emotionConfidence > best.emotionConfidence
-                ? current
-                : best,
-            null
-          );
-
-          return {
-            id: dateKey,
-            title: createCleanTitle(highlight?.content) || "Breakthrough captured.",
-            primaryTag: mapEmotionToTag(
-              highlight?.emotion,
-              highlight?.emotionConfidence
-            ),
-            tags: buildSecondaryTags(highlight || {}),
-            source: mapChatTypeToSource(highlight?.chat?.type),
-            timestamp: highlight?.createdAt || dateKey,
-            emotion: {
-              label: highlight?.emotion,
-              confidence: highlight?.emotionConfidence,
-            },
-            metrics: {
-              messageCount: total,
-              positiveCount: positive,
-            },
-            messages: list.slice(0, 3).map((message) => ({
-              id: message.id,
-              content: message.content,
-              timestamp: message.createdAt,
-              emotion: {
-                label: message.emotion,
-                confidence: message.emotionConfidence,
-              },
-              source: mapChatTypeToSource(message.chat?.type),
-            })),
-          };
-        })
-        .filter(Boolean)
-        .sort((a, b) => new Date(b.id) - new Date(a.id))
-        .slice(0, Number(limit) || 20);
+      const breakthroughMessages = favorites.map(fav => fav.message).filter(Boolean);
 
       return {
         success: true,
         data: {
           category: normalized,
-          items,
+          items: breakthroughMessages.map((msg) => ({
+            id: msg.id,
+            title: createCleanTitle(msg.content),
+            primaryTag: msg.emotion ? mapEmotionToTag(msg.emotion, msg.emotionConfidence) : "Breakthrough",
+            tags: buildSecondaryTags(msg),
+            source: mapChatTypeToSource(msg.chat?.type),
+            timestamp: msg.createdAt,
+            emotion: msg.emotion ? {
+              label: msg.emotion,
+              confidence: msg.emotionConfidence,
+            } : null,
+            chat: {
+              id: msg.chat?.id,
+              name: msg.chat?.name,
+            },
+          })),
           nextCursor: null,
         },
       };
