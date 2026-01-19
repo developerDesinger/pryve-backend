@@ -1063,6 +1063,36 @@ Use this context to provide accurate and helpful responses to the user's questio
               `Emotion detected for message ${userMessage.id}:`,
               emotionResult
             );
+
+            // AUTO-FAVORITE: Automatically add emotional messages to favorites
+            // This ensures journey states (heart-to-hearts, growth moments, etc.) update properly
+            if (emotionResult.emotion && emotionResult.confidence >= 0.5) {
+              try {
+                // Check if already favorited to avoid duplicates
+                const existingFavorite = await prisma.userMessageFavorite.findUnique({
+                  where: {
+                    messageId_userId: {
+                      messageId: userMessage.id,
+                      userId: userId,
+                    },
+                  },
+                });
+
+                if (!existingFavorite) {
+                  await prisma.userMessageFavorite.create({
+                    data: {
+                      messageId: userMessage.id,
+                      userId: userId,
+                    },
+                  });
+                  console.log(
+                    `Auto-favorited emotional message ${userMessage.id} with emotion: ${emotionResult.emotion} (confidence: ${emotionResult.confidence})`
+                  );
+                }
+              } catch (favoriteError) {
+                console.error("Failed to auto-favorite emotional message:", favoriteError);
+              }
+            }
           } catch (error) {
             console.error("Failed to update message with emotion:", error);
           }
@@ -1185,6 +1215,12 @@ Use this context to provide accurate and helpful responses to the user's questio
           isFromAI: false,
         },
       });
+
+      // Start emotion detection in parallel (non-blocking) for streaming too
+      let emotionDetectionPromise = null;
+      if (content && content.trim().length > 0) {
+        emotionDetectionPromise = EmotionDetectionService.detectEmotion(content);
+      }
 
       // Send user message confirmation
       res.write(`data: ${JSON.stringify({ type: 'user_message', messageId: userMessage.id })}\n\n`);
@@ -1410,6 +1446,60 @@ Use this context to provide accurate and helpful responses to the user's questio
         tokensUsed,
         processingTime 
       })}\n\n`);
+
+      // Update user message with emotion detection results (non-blocking) for streaming
+      if (emotionDetectionPromise) {
+        emotionDetectionPromise
+          .then(async (emotionResult) => {
+            try {
+              await prisma.message.update({
+                where: { id: userMessage.id },
+                data: {
+                  emotion: emotionResult.emotion,
+                  emotionConfidence: emotionResult.confidence,
+                },
+              });
+              console.log(
+                `Emotion detected for streaming message ${userMessage.id}:`,
+                emotionResult
+              );
+
+              // AUTO-FAVORITE: Automatically add emotional messages to favorites (streaming version)
+              if (emotionResult.emotion && emotionResult.confidence >= 0.5) {
+                try {
+                  // Check if already favorited to avoid duplicates
+                  const existingFavorite = await prisma.userMessageFavorite.findUnique({
+                    where: {
+                      messageId_userId: {
+                        messageId: userMessage.id,
+                        userId: userId,
+                      },
+                    },
+                  });
+
+                  if (!existingFavorite) {
+                    await prisma.userMessageFavorite.create({
+                      data: {
+                        messageId: userMessage.id,
+                        userId: userId,
+                      },
+                    });
+                    console.log(
+                      `Auto-favorited streaming emotional message ${userMessage.id} with emotion: ${emotionResult.emotion} (confidence: ${emotionResult.confidence})`
+                    );
+                  }
+                } catch (favoriteError) {
+                  console.error("Failed to auto-favorite streaming emotional message:", favoriteError);
+                }
+              }
+            } catch (error) {
+              console.error("Failed to update streaming message with emotion:", error);
+            }
+          })
+          .catch((error) => {
+            console.error("Emotion detection failed for streaming message:", error);
+          });
+      }
 
       res.end();
     } catch (error) {
@@ -2298,16 +2388,14 @@ Use this context to provide accurate and helpful responses to the user's questio
     }
 
     if (normalized === "heart-to-hearts") {
-      // IMPORTANT: Get ONLY FAVORITED messages from chats with >= 3 favorited emotional messages
-      // This query only returns messages that are in the userMessageFavorite table
+      // SIMPLIFIED: Get ALL favorited messages (no complex chat filtering)
+      // Heart-to-hearts now simply shows all favorited messages
       const favorites = await prisma.userMessageFavorite.findMany({
         where: {
           userId,
           message: {
             isDeleted: false,
             isFromAI: false,
-            emotion: { not: null },
-            emotionConfidence: { gte: 0.6 },
             chat: { userId, isDeleted: false },
           },
         },
@@ -2319,37 +2407,13 @@ Use this context to provide accurate and helpful responses to the user's questio
           },
         },
         orderBy: { createdAt: "desc" },
+        take: Number(limit) || 20,
       });
 
-      // Extract only favorited messages (double-check to ensure we only use favorites)
-      const favoritedMessages = favorites
+      // Get all favorited messages (simplified logic)
+      const heartToHeartMessages = favorites
         .map(fav => fav.message)
         .filter(msg => msg !== null && msg !== undefined);
-
-      // Group by chat and filter chats with >= 3 favorited emotional messages
-      const chatMap = new Map();
-      favoritedMessages.forEach(msg => {
-        if (msg && msg.chat) {
-          const chatId = msg.chat.id;
-          if (!chatMap.has(chatId)) {
-            chatMap.set(chatId, {
-              chat: msg.chat,
-              messages: [],
-            });
-          }
-          chatMap.get(chatId).messages.push(msg);
-        }
-      });
-
-      // Filter to chats with >= 3 favorited emotional messages
-      const qualifiedChats = Array.from(chatMap.values())
-        .filter(item => item.messages.length >= 3);
-
-      // Get ONLY favorited messages from qualified chats
-      const heartToHeartMessages = qualifiedChats
-        .flatMap(item => item.messages)
-        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-        .slice(0, Number(limit) || 20);
 
       return {
         success: true,
@@ -2358,14 +2422,14 @@ Use this context to provide accurate and helpful responses to the user's questio
           items: heartToHeartMessages.map((msg) => ({
             id: msg.id,
             title: createCleanTitle(msg.content),
-            primaryTag: mapEmotionToTag(msg.emotion, msg.emotionConfidence),
+            primaryTag: msg.emotion ? mapEmotionToTag(msg.emotion, msg.emotionConfidence) : "Favorite",
             tags: buildSecondaryTags(msg),
             source: mapChatTypeToSource(msg.chat?.type),
             timestamp: msg.createdAt,
-            emotion: {
+            emotion: msg.emotion ? {
               label: msg.emotion,
               confidence: msg.emotionConfidence,
-            },
+            } : null,
             chat: {
               id: msg.chat?.id,
               name: msg.chat?.name,
@@ -2697,21 +2761,19 @@ Use this context to provide accurate and helpful responses to the user's questio
       );
       const goalsAchieved = derivedGoals.length;
 
-      // SUPER SIMPLE: Heart to Hearts = Number of chats with any favorited message
-      const chatsWithFavorites = new Set();
-      favoritedMessages.forEach(msg => {
-        if (msg.chat?.id) {
-          chatsWithFavorites.add(msg.chat.id);
-        }
-      });
-      const heartToHearts = chatsWithFavorites.size;
+      // SIMPLIFIED LOGIC: Heart to Hearts = Total count of favorited messages
+      // When user favorites a message, it directly adds to heart-to-hearts count
+      const heartToHearts = totalFavorites; // Simply use the total favorites count
       const heartToHeartsList = []; // Simplified - no detailed list needed
 
-      // SUPER SIMPLE: Growth Moments = Count of favorited messages with any emotion
-      growthMomentsCount = favoritedMessages.filter(msg => msg.emotion).length;
+      // SIMPLIFIED: Growth Moments = Count of favorited messages with positive emotions (joy/surprise)
+      const growthMomentsMessages = favoritedMessages.filter(msg => 
+        msg.emotion && ['joy', 'surprise'].includes(msg.emotion)
+      );
+      growthMomentsCount = growthMomentsMessages.length;
       const growthMomentsDetailList = []; // Simplified - no detailed list needed
 
-      // SUPER SIMPLE: Breakthrough Days = Count of days with any favorited messages
+      // SIMPLIFIED: Breakthrough Days = Count of days with any favorited messages
       const daysWithFavorites = new Set();
       favoritedMessages.forEach(msg => {
         const dateKey = new Date(msg.createdAt).toISOString().split("T")[0];
