@@ -336,6 +336,26 @@ model EmotionalRule {
   @@map("emotional_rules")
 }
 
+model SystemRule {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Basic Rule Info
+  name        String // e.g., "Content Restrictions", "Bot Identity", "Behavioral Guidelines"
+  category    String // e.g., "CONTENT_FILTER", "IDENTITY", "BEHAVIOR", "SAFETY"
+  ruleType    String // e.g., "RESTRICTION", "INSTRUCTION", "IDENTITY"
+  content     String @db.Text // The actual rule content/instruction
+  description String // Description of what this rule does
+
+  // Rule Settings
+  isActive Boolean @default(true)
+  priority Int     @default(1) // Higher number = higher priority
+  severity String  @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
+
+  @@map("system_rules")
+}
+
 model AIConfig {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())

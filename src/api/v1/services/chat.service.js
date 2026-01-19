@@ -9,6 +9,7 @@ const RevenueCatService = require("./revenuecat.service");
 const { createCleanTitle } = require("../utils/textProcessor");
 const cacheService = require("../utils/cache.service");
 const responseCacheService = require("./responseCache.service");
+const EmotionalPromptService = require("./emotionalPrompt.service");
 
 // Initialize OpenAI client with connection pooling for faster requests
 const https = require('https');
@@ -279,7 +280,9 @@ class ChatService {
       }
     }
 
-    const finalSystemPrompt = resolvedSystemPrompt || "You are a helpful AI assistant.";
+    // ENHANCEMENT: Add emotional rules to the system prompt
+    const basePrompt = resolvedSystemPrompt || "You are a helpful AI assistant.";
+    const finalSystemPrompt = await EmotionalPromptService.buildEnhancedSystemPrompt(basePrompt);
     
     const chat = await prisma.chat.create({
       data: {
@@ -704,15 +707,23 @@ Use this context to provide accurate and helpful responses to the user's questio
       }
     }
 
-    // Add system prompt to messages with optimization
+    // Add system prompt to messages with optimization and emotional rules
     if (systemPromptToUse) {
       // OPTIMIZATION: Use shorter prompt for simple queries
       const optimizedPrompt = getOptimalPrompt(content, systemPromptToUse);
+      
+      // ENHANCEMENT: Add emotional rules to the system prompt
+      const enhancedPrompt = await EmotionalPromptService.buildEnhancedSystemPrompt(
+        optimizedPrompt, 
+        content
+      );
+      
       console.log(`🚀 PROMPT OPTIMIZATION: ${optimizedPrompt.length} chars vs ${systemPromptToUse.length} chars (${((1 - optimizedPrompt.length / systemPromptToUse.length) * 100).toFixed(1)}% reduction)`);
+      console.log(`🎭 EMOTIONAL RULES: Enhanced prompt length: ${enhancedPrompt.length} chars`);
       
       messages.unshift({
         role: "system",
-        content: optimizedPrompt,
+        content: enhancedPrompt,
       });
     }
 
@@ -1271,11 +1282,19 @@ Use this context to provide accurate and helpful responses to the user's questio
       if (systemPromptToUse) {
         // OPTIMIZATION: Use shorter prompt for simple queries in streaming too
         const optimizedPrompt = getOptimalPrompt(content, systemPromptToUse);
+        
+        // ENHANCEMENT: Add emotional rules to the system prompt
+        const enhancedPrompt = await EmotionalPromptService.buildEnhancedSystemPrompt(
+          optimizedPrompt, 
+          content
+        );
+        
         console.log(`🚀 STREAMING PROMPT OPTIMIZATION: ${optimizedPrompt.length} chars vs ${systemPromptToUse.length} chars`);
+        console.log(`🎭 STREAMING EMOTIONAL RULES: Enhanced prompt length: ${enhancedPrompt.length} chars`);
         
         messages.unshift({
           role: "system",
-          content: optimizedPrompt,
+          content: enhancedPrompt,
         });
       }
 
