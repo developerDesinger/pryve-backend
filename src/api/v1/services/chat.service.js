@@ -243,34 +243,21 @@ const buildSecondaryTags = (msg) => {
 };
 
 const deriveGoalsFromActivity = (messages, favorites = []) => {
-  const goals = [];
-
-  // SIMPLIFIED: Check for goal-related keywords in favorited messages
-  const goalKeywords = [
-    'goal', 'achieve', 'achieved', 'accomplish', 'accomplished', 'complete', 'completed',
-    'finish', 'finished', 'success', 'successful', 'target', 'milestone', 'progress',
-    'improvement', 'better', 'growth', 'learning', 'mastered', 'overcome', 'breakthrough'
-  ];
-
-  const goalMessages = messages.filter(msg => {
-    const content = msg.content?.toLowerCase() || '';
+  // SUPER SIMPLE: Count favorited messages with goal keywords
+  const goalKeywords = ['goal', 'achieve', 'success', 'complete', 'finish', 'accomplish'];
+  
+  return messages.filter(msg => {
+    const content = (msg.content || '').toLowerCase();
     return goalKeywords.some(keyword => content.includes(keyword));
-  });
-
-  // Create a goal for each message containing goal keywords
-  goalMessages.forEach((msg, index) => {
-    goals.push({
-      id: `goal_simple_${index}`,
-      title: "Personal Achievement",
-      summary: msg.content.substring(0, 100) + (msg.content.length > 100 ? '...' : ''),
-      themes: ["Achievement", "Growth"],
-      startedAt: msg.createdAt,
-      completedAt: msg.createdAt,
-      highlight: msg,
-    });
-  });
-
-  return goals;
+  }).map((msg, index) => ({
+    id: `goal_${index}`,
+    title: "Achievement",
+    summary: msg.content.substring(0, 50) + '...',
+    themes: ["Success"],
+    startedAt: msg.createdAt,
+    completedAt: msg.createdAt,
+    highlight: msg,
+  }));
 };
 
 class ChatService {
@@ -2691,88 +2678,27 @@ Use this context to provide accurate and helpful responses to the user's questio
       );
       const goalsAchieved = derivedGoals.length;
 
-      // Process Heart-to-Hearts: SIMPLIFIED - Only need 1 favorited message per chat
-      const chatFavoritesMap = new Map();
-      favoritedMessages
-        .forEach(msg => {
-          const chatId = msg.chat?.id;
-          if (chatId) {
-            if (!chatFavoritesMap.has(chatId)) {
-              chatFavoritesMap.set(chatId, {
-                id: chatId,
-                name: msg.chat.name,
-                type: msg.chat.type,
-                count: 0,
-                updatedAt: msg.createdAt,
-              });
-            }
-            chatFavoritesMap.get(chatId).count++;
-            // Update updatedAt to most recent message
-            if (new Date(msg.createdAt) > new Date(chatFavoritesMap.get(chatId).updatedAt)) {
-              chatFavoritesMap.get(chatId).updatedAt = msg.createdAt;
-            }
-          }
-        });
-
-      // SIMPLIFIED: Filter chats with >= 1 favorited message (instead of 3)
-      const heartToHeartsQualified = Array.from(chatFavoritesMap.values())
-        .filter(chat => chat.count >= 1)
-        .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
-      
-      const heartToHearts = heartToHeartsQualified.length;
-      const heartToHeartsList = heartToHeartsQualified
-        .slice(0, chatLimit)
-        .map((chat) => ({
-          chatId: chat.id,
-          chatName: chat.name,
-          chatType: chat.type,
-          emotionalMessageCount: chat.count,
-          lastUpdatedAt: chat.updatedAt,
-        }));
-
-      // SIMPLIFIED: Growth Moments - Any favorited message with positive emotions
-      const growthMomentsFavorited = favoritedMessages.filter(
-        msg => 
-          ["joy", "surprise", "love", "gratitude", "excitement", "happiness", "contentment"].includes(msg.emotion)
-      );
-      
-      growthMomentsCount = growthMomentsFavorited.length;
-      const growthMomentsDetailList = growthMomentsFavorited
-        .slice(0, messageLimit)
-        .map((msg) => ({
-          id: msg.id,
-          content: msg.content,
-          emotion: msg.emotion,
-          emotionConfidence: msg.emotionConfidence,
-          createdAt: msg.createdAt,
-          chat: {
-            id: msg.chat?.id,
-            name: msg.chat?.name,
-            type: msg.chat?.type,
-          },
-        }));
-
-      // SIMPLIFIED: Breakthrough Days - Any day with 3+ favorited messages
-      const breakthroughMessages = favoritedMessages;
-
-      const dailyEmotions = {};
-      breakthroughMessages.forEach((msg) => {
-        const dateKey = new Date(msg.createdAt).toISOString().split("T")[0];
-        if (!dailyEmotions[dateKey]) {
-          dailyEmotions[dateKey] = {
-            count: 0,
-            positiveCount: 0,
-          };
+      // SUPER SIMPLE: Heart to Hearts = Number of chats with any favorited message
+      const chatsWithFavorites = new Set();
+      favoritedMessages.forEach(msg => {
+        if (msg.chat?.id) {
+          chatsWithFavorites.add(msg.chat.id);
         }
-        dailyEmotions[dateKey].count += 1;
-        // Count all favorited messages as positive
-        dailyEmotions[dateKey].positiveCount += 1;
       });
+      const heartToHearts = chatsWithFavorites.size;
+      const heartToHeartsList = []; // Simplified - no detailed list needed
 
-      // SIMPLIFIED: Only need 3+ favorited messages in one day
-      const breakthroughDays = Object.values(dailyEmotions).filter(
-        (day) => day.count >= 3
-      ).length;
+      // SUPER SIMPLE: Growth Moments = Count of favorited messages with any emotion
+      growthMomentsCount = favoritedMessages.filter(msg => msg.emotion).length;
+      const growthMomentsDetailList = []; // Simplified - no detailed list needed
+
+      // SUPER SIMPLE: Breakthrough Days = Count of days with any favorited messages
+      const daysWithFavorites = new Set();
+      favoritedMessages.forEach(msg => {
+        const dateKey = new Date(msg.createdAt).toISOString().split("T")[0];
+        daysWithFavorites.add(dateKey);
+      });
+      const breakthroughDays = daysWithFavorites.size;
 
       // Weekly Journey: Only count favorited messages
       const currentDate = new Date();
