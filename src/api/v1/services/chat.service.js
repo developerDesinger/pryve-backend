@@ -2704,6 +2704,9 @@ Use this context to provide accurate and helpful responses to the user's questio
 
       // FIXED: Heart to Hearts = Count of favorited user messages (not AI messages)
       // This should match the logic in getJourneyMessages for heart-to-hearts category
+      console.log(`🔧 [JOURNEY FIX v2.0] Calculating heart-to-hearts for user: ${userId}`);
+      console.log(`🔧 [JOURNEY FIX v2.0] Total favorites: ${totalFavorites}`);
+      
       const heartToHeartsCount = await prisma.userMessageFavorite.count({
         where: {
           userId,
@@ -2714,6 +2717,12 @@ Use this context to provide accurate and helpful responses to the user's questio
           },
         },
       });
+      
+      console.log(`🔧 [JOURNEY FIX v2.0] Heart-to-hearts count (user messages only): ${heartToHeartsCount}`);
+      console.log(`🔧 [JOURNEY FIX v2.0] OLD LOGIC would have returned: ${totalFavorites}`);
+      console.log(`🔧 [JOURNEY FIX v2.0] NEW LOGIC returns: ${heartToHeartsCount}`);
+      console.log(`🔧 [JOURNEY FIX v2.0] Fix deployed successfully!`);
+      
       const heartToHearts = heartToHeartsCount;
       const heartToHeartsList = []; // Simplified - no detailed list needed
 
@@ -3079,6 +3088,7 @@ Use this context to provide accurate and helpful responses to the user's questio
       return {
         message: "Journey page data fetched successfully.",
         success: true,
+        version: "JOURNEY_FIX_v2.0_DEPLOYED", // Version identifier to check deployment
         data: {
           user,
           journeyOverview: {
