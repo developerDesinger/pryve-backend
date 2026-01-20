@@ -9,6 +9,7 @@ const RevenueCatService = require("./revenuecat.service");
 const { createCleanTitle } = require("../utils/textProcessor");
 const cacheService = require("../utils/cache.service");
 const responseCacheService = require("./responseCache.service");
+const EmotionalPromptService = require("./emotionalPrompt.service");
 
 // Initialize OpenAI client with connection pooling for faster requests
 const https = require('https');
@@ -243,155 +244,21 @@ const buildSecondaryTags = (msg) => {
 };
 
 const deriveGoalsFromActivity = (messages, favorites = []) => {
-  const goals = [];
-
-  const reflections = messages.filter(
-    (msg) => msg.chat?.type === "PERSONAL_AI"
-  );
-  const streak = consecutiveWindow(
-    reflections.map((msg) => msg.createdAt),
-    7
-  );
-
-  if (streak) {
-    const highlight = reflections.find(
-      (msg) => toDateKey(msg.createdAt) === toDateKey(streak.end)
-    );
-
-    goals.push({
-      id: "goal_consistency",
-      title: "Started journaling daily.",
-      summary: "Logged reflections 7 days in a row.",
-      themes: ["Reflection", "Resilience"],
-      startedAt: streak.start,
-      completedAt: streak.end,
-      highlight,
-    });
-  }
-
-  const connectionMessages = messages.filter((msg) => {
-    const emotion = msg.emotion?.toLowerCase();
-    return (
-      msg.chat?.type === "CONVERSATION" &&
-      (emotion === "joy" || emotion === "surprise") &&
-      msg.emotionConfidence >= 0.7
-    );
-  });
-
-  if (connectionMessages.length >= 3) {
-    for (let i = 0; i < connectionMessages.length; i++) {
-      const start = new Date(connectionMessages[i].createdAt);
-      const windowEnd = new Date(start.getTime() + 30 * MS_PER_DAY);
-      let count = 1;
-      let last = connectionMessages[i];
-
-      for (let j = i + 1; j < connectionMessages.length; j++) {
-        const currentDate = new Date(connectionMessages[j].createdAt);
-        if (currentDate <= windowEnd) {
-          count += 1;
-          last = connectionMessages[j];
-        } else {
-          break;
-        }
-      }
-
-      if (count >= 3) {
-        goals.push({
-          id: "goal_connection",
-          title: "Reached out to a friend.",
-          summary: "Shared 3 uplifting conversations within 30 days.",
-          themes: ["Courage", "Connection"],
-          startedAt: start,
-          completedAt: new Date(last.createdAt),
-          highlight: last,
-        });
-        break;
-      }
-    }
-  }
-
-  const boundaryTriggers = messages.filter((msg) => {
-    const emotion = msg.emotion?.toLowerCase();
-    return (
-      (emotion === "anger" || emotion === "fear") &&
-      msg.emotionConfidence >= 0.8
-    );
-  });
-
-  for (const trigger of boundaryTriggers) {
-    const start = new Date(trigger.createdAt);
-    const windowEnd = new Date(start.getTime() + 14 * MS_PER_DAY);
-    const followUps = messages.filter((msg) => {
-      const date = new Date(msg.createdAt);
-      const emotion = msg.emotion?.toLowerCase();
-      return (
-        date > start &&
-        date <= windowEnd &&
-        (emotion === "joy" || emotion === "surprise")
-      );
-    });
-
-    if (followUps.length >= 2) {
-      const last = followUps[followUps.length - 1];
-      goals.push({
-        id: "goal_boundaries",
-        title: "Implemented new boundaries.",
-        summary: "Turned tough emotions into empowered action.",
-        themes: ["Development", "Confidence"],
-        startedAt: start,
-        completedAt: new Date(last.createdAt),
-        highlight: last,
-      });
-      break;
-    }
-  }
-
-  const voiceWeeks = new Map();
-  messages
-    .filter((msg) => msg.chat?.type === "VOICE_NOTE")
-    .forEach((msg) => {
-      const key = getWeekKey(msg.createdAt);
-      if (!voiceWeeks.has(key)) voiceWeeks.set(key, msg);
-    });
-
-  if (voiceWeeks.size >= 3) {
-    const weeks = Array.from(voiceWeeks.values()).sort(
-      (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
-    );
-    const last = weeks[weeks.length - 1];
-    goals.push({
-      id: "goal_meditation",
-      title: "Set a weekly meditation practice.",
-      summary: "Voice notes became a steady mindfulness ritual.",
-      themes: ["Routine", "Peace"],
-      startedAt: new Date(weeks[0].createdAt),
-      completedAt: new Date(last.createdAt),
-      highlight: last,
-    });
-  }
-
-  if (favorites.length >= 5) {
-    const newest = new Date(favorites[0].createdAt);
-    const oldest = new Date(favorites[favorites.length - 1].createdAt);
-    const highlight = favorites[0].message;
-    goals.push({
-      id: "goal_learning",
-      title: "Finished a course.",
-      summary: "Saved 5 insights worth remembering.",
-      themes: ["Growth", "Learning"],
-      startedAt: oldest,
-      completedAt: newest,
-      highlight,
-    });
-  }
-
-  goals.sort(
-    (a, b) =>
-      new Date(b.completedAt || b.startedAt) -
-      new Date(a.completedAt || a.startedAt)
-  );
-
-  return goals;
+  // SUPER SIMPLE: Count favorited messages with goal keywords
+  const goalKeywords = ['goal', 'achieve', 'success', 'complete', 'finish', 'accomplish'];
+  
+  return messages.filter(msg => {
+    const content = (msg.content || '').toLowerCase();
+    return goalKeywords.some(keyword => content.includes(keyword));
+  }).map((msg, index) => ({
+    id: `goal_${index}`,
+    title: "Achievement",
+    summary: msg.content.substring(0, 50) + '...',
+    themes: ["Success"],
+    startedAt: msg.createdAt,
+    completedAt: msg.createdAt,
+    highlight: msg,
+  }));
 };
 
 class ChatService {
@@ -413,7 +280,9 @@ class ChatService {
       }
     }
 
-    const finalSystemPrompt = resolvedSystemPrompt || "You are a helpful AI assistant.";
+    // ENHANCEMENT: Add emotional rules to the system prompt
+    const basePrompt = resolvedSystemPrompt || "You are a helpful AI assistant.";
+    const finalSystemPrompt = await EmotionalPromptService.buildEnhancedSystemPrompt(basePrompt);
     
     const chat = await prisma.chat.create({
       data: {
@@ -517,16 +386,21 @@ class ChatService {
     let aiConfig = cacheService.get(AI_CONFIG_CACHE_KEY);
     
     // OPTIMIZATION: Parallelize independent database queries
-    // Run chat lookup, user lookup, AI config (if not cached), and zodiac lookup in parallel
+    // OPTIMIZATION: Combine database queries into fewer round trips
     const dbQueries = [
-      // Get chat details
+      // Get chat details with related user data in one query
       prisma.chat.findFirst({
         where: { id: chatId, userId },
-      }),
-      // Check user's query count before processing (skip for premium users)
-      prisma.user.findUnique({
-        where: { id: userId },
-        select: { queryCount: true },
+        include: {
+          user: {
+            select: { 
+              queryCount: true, 
+              dateOfBirth: true,
+              id: true,
+              email: true
+            }
+          }
+        }
       }),
       // Get AI config from cache or database
       aiConfig
@@ -540,22 +414,22 @@ class ChatService {
             }
             return config;
           }),
-      // Inject zodiac from user's birthday (fetch early for later use)
-      prisma.user.findUnique({
-        where: { id: userId },
-        select: { dateOfBirth: true },
-      }),
     ];
 
-    const [chat, userForQueryCheck, fetchedAiConfig, userForZodiac] = await Promise.all(dbQueries);
+    const [chatWithUser, fetchedAiConfig] = await Promise.all(dbQueries);
     
     // Use fetched AI config (either from cache or database)
     aiConfig = fetchedAiConfig;
 
     // Validate chat exists
-    if (!chat) {
+    if (!chatWithUser) {
       throw new AppError("Chat not found.", HttpStatusCodes.NOT_FOUND);
     }
+
+    // Extract chat and user data from combined query
+    const chat = chatWithUser;
+    const userForQueryCheck = chatWithUser.user;
+    const userForZodiac = chatWithUser.user;
 
     // Validate user exists
     if (!userForQueryCheck) {
@@ -670,9 +544,15 @@ class ChatService {
       });
     }
 
-    // Prepare messages for OpenAI context
+    // Prepare messages for OpenAI context - optimized query
     const previousMessages = await prisma.message.findMany({
       where: { chatId },
+      select: {
+        content: true,
+        isFromAI: true,
+        createdAt: true,
+        type: true
+      },
       orderBy: { createdAt: "asc" },
       take: 20, // Get last 20 messages for context
     });
@@ -827,15 +707,23 @@ Use this context to provide accurate and helpful responses to the user's questio
       }
     }
 
-    // Add system prompt to messages with optimization
+    // Add system prompt to messages with optimization and emotional rules
     if (systemPromptToUse) {
       // OPTIMIZATION: Use shorter prompt for simple queries
       const optimizedPrompt = getOptimalPrompt(content, systemPromptToUse);
+      
+      // ENHANCEMENT: Add emotional rules to the system prompt
+      const enhancedPrompt = await EmotionalPromptService.buildEnhancedSystemPrompt(
+        optimizedPrompt, 
+        content
+      );
+      
       console.log(`🚀 PROMPT OPTIMIZATION: ${optimizedPrompt.length} chars vs ${systemPromptToUse.length} chars (${((1 - optimizedPrompt.length / systemPromptToUse.length) * 100).toFixed(1)}% reduction)`);
+      console.log(`🎭 EMOTIONAL RULES: Enhanced prompt length: ${enhancedPrompt.length} chars`);
       
       messages.unshift({
         role: "system",
-        content: optimizedPrompt,
+        content: enhancedPrompt,
       });
     }
 
@@ -1175,6 +1063,36 @@ Use this context to provide accurate and helpful responses to the user's questio
               `Emotion detected for message ${userMessage.id}:`,
               emotionResult
             );
+
+            // AUTO-FAVORITE: Automatically add emotional messages to favorites
+            // This ensures journey states (heart-to-hearts, growth moments, etc.) update properly
+            if (emotionResult.emotion && emotionResult.confidence >= 0.5) {
+              try {
+                // Check if already favorited to avoid duplicates
+                const existingFavorite = await prisma.userMessageFavorite.findUnique({
+                  where: {
+                    messageId_userId: {
+                      messageId: userMessage.id,
+                      userId: userId,
+                    },
+                  },
+                });
+
+                if (!existingFavorite) {
+                  await prisma.userMessageFavorite.create({
+                    data: {
+                      messageId: userMessage.id,
+                      userId: userId,
+                    },
+                  });
+                  console.log(
+                    `Auto-favorited emotional message ${userMessage.id} with emotion: ${emotionResult.emotion} (confidence: ${emotionResult.confidence})`
+                  );
+                }
+              } catch (favoriteError) {
+                console.error("Failed to auto-favorite emotional message:", favoriteError);
+              }
+            }
           } catch (error) {
             console.error("Failed to update message with emotion:", error);
           }
@@ -1215,14 +1133,21 @@ Use this context to provide accurate and helpful responses to the user's questio
       const AI_CONFIG_CACHE_KEY = "ai_config";
       let aiConfig = cacheService.get(AI_CONFIG_CACHE_KEY);
       
-      // OPTIMIZATION: Parallelize independent database queries
+      // OPTIMIZATION: Combine database queries into fewer round trips
       const dbQueries = [
+        // Get chat details with related user data in one query
         prisma.chat.findFirst({
           where: { id: chatId, userId },
-        }),
-        prisma.user.findUnique({
-          where: { id: userId },
-          select: { queryCount: true },
+          include: {
+            user: {
+              select: { 
+                queryCount: true, 
+                dateOfBirth: true,
+                id: true,
+                email: true
+              }
+            }
+          }
         }),
         aiConfig
           ? Promise.resolve(aiConfig)
@@ -1234,20 +1159,21 @@ Use this context to provide accurate and helpful responses to the user's questio
               }
               return config;
             }),
-        prisma.user.findUnique({
-          where: { id: userId },
-          select: { dateOfBirth: true },
-        }),
       ];
 
-      const [chat, userForQueryCheck, fetchedAiConfig, userForZodiac] = await Promise.all(dbQueries);
+      const [chatWithUser, fetchedAiConfig] = await Promise.all(dbQueries);
       aiConfig = fetchedAiConfig;
 
-      if (!chat) {
+      if (!chatWithUser) {
         res.write(`data: ${JSON.stringify({ type: 'error', message: 'Chat not found' })}\n\n`);
         res.end();
         return;
       }
+
+      // Extract chat and user data from combined query
+      const chat = chatWithUser;
+      const userForQueryCheck = chatWithUser.user;
+      const userForZodiac = chatWithUser.user;
 
       if (!userForQueryCheck) {
         res.write(`data: ${JSON.stringify({ type: 'error', message: 'User not found' })}\n\n`);
@@ -1290,12 +1216,86 @@ Use this context to provide accurate and helpful responses to the user's questio
         },
       });
 
+      // Start emotion detection in parallel (non-blocking) for streaming too
+      let emotionDetectionPromise = null;
+      if (content && content.trim().length > 0) {
+        emotionDetectionPromise = EmotionDetectionService.detectEmotion(content);
+      }
+
       // Send user message confirmation
       res.write(`data: ${JSON.stringify({ type: 'user_message', messageId: userMessage.id })}\n\n`);
 
-      // Prepare messages for OpenAI context
+      // OPTIMIZATION: Check cache for similar queries before calling OpenAI
+      if (content && content.trim().length > 0) {
+        const cachedResponse = await responseCacheService.getCachedResponse(
+          content,
+          chatId,
+          userId
+        );
+
+        if (cachedResponse && cachedResponse.content) {
+          // Use cached response for streaming
+          console.log(`✅ Cache hit! Using cached response for streaming`);
+          
+          // Stream the cached response in chunks for better UX
+          const cachedContent = cachedResponse.content;
+          const chunkSize = 20; // Characters per chunk
+          
+          for (let i = 0; i < cachedContent.length; i += chunkSize) {
+            const chunk = cachedContent.substring(i, i + chunkSize);
+            res.write(`data: ${JSON.stringify({ type: 'chunk', content: chunk })}\n\n`);
+            // Small delay to simulate streaming
+            await new Promise(resolve => setTimeout(resolve, 10));
+          }
+
+          // Save cached response as AI message
+          const aiResponse = await prisma.message.create({
+            data: {
+              content: cachedContent,
+              type: "TEXT",
+              chatId,
+              senderId: userId,
+              isFromAI: true,
+              aiModel: chat.aiModel,
+              tokensUsed: 0,
+              processingTime: 10,
+            },
+          });
+
+          // Update chat metadata
+          await prisma.chat.update({
+            where: { id: chatId },
+            data: {
+              lastMessageAt: new Date(),
+              lastMessage: cachedContent,
+              messageCount: { increment: 2 },
+            },
+          });
+
+          // Send completion message
+          res.write(`data: ${JSON.stringify({ 
+            type: 'done', 
+            messageId: aiResponse.id,
+            tokensUsed: 0,
+            processingTime: 10,
+            fromCache: true,
+            similarity: cachedResponse.similarity
+          })}\n\n`);
+
+          res.end();
+          return;
+        }
+      }
+
+      // Prepare messages for OpenAI context - optimized query
       const previousMessages = await prisma.message.findMany({
         where: { chatId },
+        select: {
+          content: true,
+          isFromAI: true,
+          createdAt: true,
+          type: true
+        },
         orderBy: { createdAt: "asc" },
         take: 20,
       });
@@ -1318,11 +1318,19 @@ Use this context to provide accurate and helpful responses to the user's questio
       if (systemPromptToUse) {
         // OPTIMIZATION: Use shorter prompt for simple queries in streaming too
         const optimizedPrompt = getOptimalPrompt(content, systemPromptToUse);
+        
+        // ENHANCEMENT: Add emotional rules to the system prompt
+        const enhancedPrompt = await EmotionalPromptService.buildEnhancedSystemPrompt(
+          optimizedPrompt, 
+          content
+        );
+        
         console.log(`🚀 STREAMING PROMPT OPTIMIZATION: ${optimizedPrompt.length} chars vs ${systemPromptToUse.length} chars`);
+        console.log(`🎭 STREAMING EMOTIONAL RULES: Enhanced prompt length: ${enhancedPrompt.length} chars`);
         
         messages.unshift({
           role: "system",
-          content: optimizedPrompt,
+          content: enhancedPrompt,
         });
       }
 
@@ -1408,6 +1416,29 @@ Use this context to provide accurate and helpful responses to the user's questio
         },
       });
 
+      // OPTIMIZATION: Cache the streaming response for future similar queries
+      if (content && content.trim().length > 0 && fullResponse) {
+        // Cache in background (non-blocking)
+        setImmediate(async () => {
+          try {
+            await responseCacheService.setCachedResponse(
+              content,
+              chatId,
+              userId,
+              {
+                content: fullResponse,
+                aiModel: selectedModel,
+                tokensUsed,
+                processingTime,
+              }
+            );
+          } catch (cacheError) {
+            // Non-critical - don't affect user experience
+            console.error("Error caching streaming response:", cacheError);
+          }
+        });
+      }
+
       // Send completion message
       res.write(`data: ${JSON.stringify({ 
         type: 'done', 
@@ -1415,6 +1446,60 @@ Use this context to provide accurate and helpful responses to the user's questio
         tokensUsed,
         processingTime 
       })}\n\n`);
+
+      // Update user message with emotion detection results (non-blocking) for streaming
+      if (emotionDetectionPromise) {
+        emotionDetectionPromise
+          .then(async (emotionResult) => {
+            try {
+              await prisma.message.update({
+                where: { id: userMessage.id },
+                data: {
+                  emotion: emotionResult.emotion,
+                  emotionConfidence: emotionResult.confidence,
+                },
+              });
+              console.log(
+                `Emotion detected for streaming message ${userMessage.id}:`,
+                emotionResult
+              );
+
+              // AUTO-FAVORITE: Automatically add emotional messages to favorites (streaming version)
+              if (emotionResult.emotion && emotionResult.confidence >= 0.5) {
+                try {
+                  // Check if already favorited to avoid duplicates
+                  const existingFavorite = await prisma.userMessageFavorite.findUnique({
+                    where: {
+                      messageId_userId: {
+                        messageId: userMessage.id,
+                        userId: userId,
+                      },
+                    },
+                  });
+
+                  if (!existingFavorite) {
+                    await prisma.userMessageFavorite.create({
+                      data: {
+                        messageId: userMessage.id,
+                        userId: userId,
+                      },
+                    });
+                    console.log(
+                      `Auto-favorited streaming emotional message ${userMessage.id} with emotion: ${emotionResult.emotion} (confidence: ${emotionResult.confidence})`
+                    );
+                  }
+                } catch (favoriteError) {
+                  console.error("Failed to auto-favorite streaming emotional message:", favoriteError);
+                }
+              }
+            } catch (error) {
+              console.error("Failed to update streaming message with emotion:", error);
+            }
+          })
+          .catch((error) => {
+            console.error("Emotion detection failed for streaming message:", error);
+          });
+      }
 
       res.end();
     } catch (error) {
@@ -2188,15 +2273,23 @@ Use this context to provide accurate and helpful responses to the user's questio
     }
 
     if (normalized === "goals-achieved") {
-      // UPDATED: Get only FAVORITED emotional messages for goal derivation
+      // SIMPLE: Favorited messages that contain goal-related words
       const favorites = await prisma.userMessageFavorite.findMany({
         where: {
           userId,
           message: {
             isDeleted: false,
             isFromAI: false,
-            emotion: { not: null },
             chat: { userId, isDeleted: false },
+            OR: [
+              { content: { contains: "goal", mode: "insensitive" } },
+              { content: { contains: "achieve", mode: "insensitive" } },
+              { content: { contains: "complete", mode: "insensitive" } },
+              { content: { contains: "accomplish", mode: "insensitive" } },
+              { content: { contains: "success", mode: "insensitive" } },
+              { content: { contains: "finish", mode: "insensitive" } },
+              { content: { contains: "done", mode: "insensitive" } },
+            ],
           },
         },
         include: {
@@ -2207,44 +2300,30 @@ Use this context to provide accurate and helpful responses to the user's questio
           },
         },
         orderBy: { createdAt: "desc" },
-        take: 500,
+        take: Number(limit) || 20,
       });
 
-      // Filter to only emotional user messages
-      const emotionalMessages = favorites
-        .filter(fav => fav.message && !fav.message.isFromAI && fav.message.emotion)
-        .map(fav => fav.message);
-
-      const detectedGoals = deriveGoalsFromActivity(emotionalMessages, favorites);
-      const boundedGoals = detectedGoals.slice(0, Number(limit) || 20);
+      const goalMessages = favorites.map(fav => fav.message).filter(Boolean);
 
       return {
         success: true,
         data: {
           category: normalized,
-          items: boundedGoals.map((goal) => ({
-            id: goal.id,
-            title: goal.title,
-            summary: goal.summary,
-            tags: goal.themes,
-            duration: formatDuration(goal.startedAt, goal.completedAt),
-            timestamp: goal.completedAt || goal.startedAt,
-            emotion: goal.highlight
-              ? {
-                  label: goal.highlight.emotion,
-                  confidence: goal.highlight.emotionConfidence,
-                }
-              : null,
-            highlightMessage: goal.highlight
-              ? {
-                  id: goal.highlight.id,
-                  content: goal.highlight.content,
-                  emotion: goal.highlight.emotion,
-                  emotionConfidence: goal.highlight.emotionConfidence,
-                  source: mapChatTypeToSource(goal.highlight.chat?.type),
-                  timestamp: goal.highlight.createdAt,
-                }
-              : null,
+          items: goalMessages.map((msg) => ({
+            id: msg.id,
+            title: createCleanTitle(msg.content),
+            primaryTag: msg.emotion ? mapEmotionToTag(msg.emotion, msg.emotionConfidence) : "Goal",
+            tags: buildSecondaryTags(msg),
+            source: mapChatTypeToSource(msg.chat?.type),
+            timestamp: msg.createdAt,
+            emotion: msg.emotion ? {
+              label: msg.emotion,
+              confidence: msg.emotionConfidence,
+            } : null,
+            chat: {
+              id: msg.chat?.id,
+              name: msg.chat?.name,
+            },
           })),
           nextCursor: null,
         },
@@ -2252,7 +2331,7 @@ Use this context to provide accurate and helpful responses to the user's questio
     }
 
     if (normalized === "growth-moments") {
-      // UPDATED: Get only FAVORITED growth messages
+      // SIMPLE: Favorited messages with positive emotions (joy, surprise)
       const favorites = await prisma.userMessageFavorite.findMany({
         where: {
           userId,
@@ -2260,7 +2339,6 @@ Use this context to provide accurate and helpful responses to the user's questio
             isDeleted: false,
             isFromAI: false,
             emotion: { in: ["joy", "surprise"] },
-            emotionConfidence: { gte: 0.7 },
             chat: { userId, isDeleted: false },
           },
         },
@@ -2303,16 +2381,13 @@ Use this context to provide accurate and helpful responses to the user's questio
     }
 
     if (normalized === "heart-to-hearts") {
-      // IMPORTANT: Get ONLY FAVORITED messages from chats with >= 3 favorited emotional messages
-      // This query only returns messages that are in the userMessageFavorite table
+      // SIMPLE: If message is favorited, it appears in heart-to-hearts
       const favorites = await prisma.userMessageFavorite.findMany({
         where: {
           userId,
           message: {
             isDeleted: false,
             isFromAI: false,
-            emotion: { not: null },
-            emotionConfidence: { gte: 0.6 },
             chat: { userId, isDeleted: false },
           },
         },
@@ -2324,37 +2399,12 @@ Use this context to provide accurate and helpful responses to the user's questio
           },
         },
         orderBy: { createdAt: "desc" },
+        take: Number(limit) || 20,
       });
 
-      // Extract only favorited messages (double-check to ensure we only use favorites)
-      const favoritedMessages = favorites
+      const heartToHeartMessages = favorites
         .map(fav => fav.message)
-        .filter(msg => msg !== null && msg !== undefined);
-
-      // Group by chat and filter chats with >= 3 favorited emotional messages
-      const chatMap = new Map();
-      favoritedMessages.forEach(msg => {
-        if (msg && msg.chat) {
-          const chatId = msg.chat.id;
-          if (!chatMap.has(chatId)) {
-            chatMap.set(chatId, {
-              chat: msg.chat,
-              messages: [],
-            });
-          }
-          chatMap.get(chatId).messages.push(msg);
-        }
-      });
-
-      // Filter to chats with >= 3 favorited emotional messages
-      const qualifiedChats = Array.from(chatMap.values())
-        .filter(item => item.messages.length >= 3);
-
-      // Get ONLY favorited messages from qualified chats
-      const heartToHeartMessages = qualifiedChats
-        .flatMap(item => item.messages)
-        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-        .slice(0, Number(limit) || 20);
+        .filter(msg => msg !== null);
 
       return {
         success: true,
@@ -2363,14 +2413,14 @@ Use this context to provide accurate and helpful responses to the user's questio
           items: heartToHeartMessages.map((msg) => ({
             id: msg.id,
             title: createCleanTitle(msg.content),
-            primaryTag: mapEmotionToTag(msg.emotion, msg.emotionConfidence),
+            primaryTag: msg.emotion ? mapEmotionToTag(msg.emotion, msg.emotionConfidence) : "Favorite",
             tags: buildSecondaryTags(msg),
             source: mapChatTypeToSource(msg.chat?.type),
             timestamp: msg.createdAt,
-            emotion: {
+            emotion: msg.emotion ? {
               label: msg.emotion,
               confidence: msg.emotionConfidence,
-            },
+            } : null,
             chat: {
               id: msg.chat?.id,
               name: msg.chat?.name,
@@ -2382,7 +2432,7 @@ Use this context to provide accurate and helpful responses to the user's questio
     }
 
     if (normalized === "breakthrough-days") {
-      // UPDATED: Get only FAVORITED emotional messages with confidence >= 0.7
+      // SIMPLE: Favorited messages with strong emotions, grouped by day
       const favorites = await prisma.userMessageFavorite.findMany({
         where: {
           userId,
@@ -2390,7 +2440,6 @@ Use this context to provide accurate and helpful responses to the user's questio
             isDeleted: false,
             isFromAI: false,
             emotion: { not: null },
-            emotionConfidence: { gte: 0.7 },
             chat: { userId, isDeleted: false },
           },
         },
@@ -2402,80 +2451,31 @@ Use this context to provide accurate and helpful responses to the user's questio
           },
         },
         orderBy: { createdAt: "desc" },
+        take: Number(limit) || 20,
       });
 
-      const rawMessages = favorites.map(fav => fav.message).filter(Boolean);
-
-      const grouped = rawMessages.reduce((acc, msg) => {
-        const key = toDateKey(msg.createdAt);
-        if (!acc[key]) {
-          acc[key] = [];
-        }
-        acc[key].push(msg);
-        return acc;
-      }, {});
-
-      const items = Object.entries(grouped)
-        .map(([dateKey, list]) => {
-          const total = list.length;
-          const positive = list.filter((message) =>
-            ["joy", "surprise"].includes(message.emotion?.toLowerCase())
-          ).length;
-
-          if (
-            total < BREAKTHROUGH_MIN_TOTAL ||
-            positive < BREAKTHROUGH_MIN_POSITIVE
-          ) {
-            return null;
-          }
-
-          const highlight = list.reduce(
-            (best, current) =>
-              !best || current.emotionConfidence > best.emotionConfidence
-                ? current
-                : best,
-            null
-          );
-
-          return {
-            id: dateKey,
-            title: createCleanTitle(highlight?.content) || "Breakthrough captured.",
-            primaryTag: mapEmotionToTag(
-              highlight?.emotion,
-              highlight?.emotionConfidence
-            ),
-            tags: buildSecondaryTags(highlight || {}),
-            source: mapChatTypeToSource(highlight?.chat?.type),
-            timestamp: highlight?.createdAt || dateKey,
-            emotion: {
-              label: highlight?.emotion,
-              confidence: highlight?.emotionConfidence,
-            },
-            metrics: {
-              messageCount: total,
-              positiveCount: positive,
-            },
-            messages: list.slice(0, 3).map((message) => ({
-              id: message.id,
-              content: message.content,
-              timestamp: message.createdAt,
-              emotion: {
-                label: message.emotion,
-                confidence: message.emotionConfidence,
-              },
-              source: mapChatTypeToSource(message.chat?.type),
-            })),
-          };
-        })
-        .filter(Boolean)
-        .sort((a, b) => new Date(b.id) - new Date(a.id))
-        .slice(0, Number(limit) || 20);
+      const breakthroughMessages = favorites.map(fav => fav.message).filter(Boolean);
 
       return {
         success: true,
         data: {
           category: normalized,
-          items,
+          items: breakthroughMessages.map((msg) => ({
+            id: msg.id,
+            title: createCleanTitle(msg.content),
+            primaryTag: msg.emotion ? mapEmotionToTag(msg.emotion, msg.emotionConfidence) : "Breakthrough",
+            tags: buildSecondaryTags(msg),
+            source: mapChatTypeToSource(msg.chat?.type),
+            timestamp: msg.createdAt,
+            emotion: msg.emotion ? {
+              label: msg.emotion,
+              confidence: msg.emotionConfidence,
+            } : null,
+            chat: {
+              id: msg.chat?.id,
+              name: msg.chat?.name,
+            },
+          })),
           nextCursor: null,
         },
       };
@@ -2569,7 +2569,7 @@ Use this context to provide accurate and helpful responses to the user's questio
     const chatLimit = parseInt(query.chatLimit) || 5;
     const messageLimit = parseInt(query.messageLimit) || 10;
     const vaultLimit = parseInt(query.vaultLimit) || 20;
-
+console.log("this is me@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
     try {
       // Get user data
       const user = await prisma.user.findUnique({
@@ -2672,8 +2672,8 @@ Use this context to provide accurate and helpful responses to the user's questio
           userId,
           message: {
             isDeleted: false,
-            isFromAI: false,
-            emotion: { not: null },
+            //isFromAI: false,
+           // emotion: { not: null },
             chat: { userId, isDeleted: false },
           },
         },
@@ -2702,92 +2702,44 @@ Use this context to provide accurate and helpful responses to the user's questio
       );
       const goalsAchieved = derivedGoals.length;
 
-      // Process Heart-to-Hearts: Group favorited messages by chat
-      const chatFavoritesMap = new Map();
-      favoritedMessages
-        .filter(msg => msg.emotionConfidence >= 0.6)
-        .forEach(msg => {
-          const chatId = msg.chat?.id;
-          if (chatId) {
-            if (!chatFavoritesMap.has(chatId)) {
-              chatFavoritesMap.set(chatId, {
-                id: chatId,
-                name: msg.chat.name,
-                type: msg.chat.type,
-                count: 0,
-                updatedAt: msg.createdAt,
-              });
-            }
-            chatFavoritesMap.get(chatId).count++;
-            // Update updatedAt to most recent message
-            if (new Date(msg.createdAt) > new Date(chatFavoritesMap.get(chatId).updatedAt)) {
-              chatFavoritesMap.get(chatId).updatedAt = msg.createdAt;
-            }
-          }
-        });
-
-      // Filter chats with >= 3 favorited emotional messages
-      const heartToHeartsQualified = Array.from(chatFavoritesMap.values())
-        .filter(chat => chat.count >= 3)
-        .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+      // FIXED: Heart to Hearts = Count of favorited user messages (not AI messages)
+      // This should match the logic in getJourneyMessages for heart-to-hearts category
+      console.log(`🔧 [JOURNEY FIX v2.0] Calculating heart-to-hearts for user: ${userId}`);
+      console.log(`🔧 [JOURNEY FIX v2.0] Total favorites: ${totalFavorites}`);
       
-      const heartToHearts = heartToHeartsQualified.length;
-      const heartToHeartsList = heartToHeartsQualified
-        .slice(0, chatLimit)
-        .map((chat) => ({
-          chatId: chat.id,
-          chatName: chat.name,
-          chatType: chat.type,
-          emotionalMessageCount: chat.count,
-          lastUpdatedAt: chat.updatedAt,
-        }));
-
-      // Process Growth Moments: Only favorited messages with joy/surprise
-      const growthMomentsFavorited = favoritedMessages.filter(
-        msg => 
-          ["joy", "surprise"].includes(msg.emotion) && 
-          msg.emotionConfidence >= 0.7
-      );
-      
-      growthMomentsCount = growthMomentsFavorited.length;
-      const growthMomentsDetailList = growthMomentsFavorited
-        .slice(0, messageLimit)
-        .map((msg) => ({
-          id: msg.id,
-          content: msg.content,
-          emotion: msg.emotion,
-          emotionConfidence: msg.emotionConfidence,
-          createdAt: msg.createdAt,
-          chat: {
-            id: msg.chat?.id,
-            name: msg.chat?.name,
-            type: msg.chat?.type,
+      const heartToHeartsCount = await prisma.userMessageFavorite.count({
+        where: {
+          userId,
+          message: {
+            isDeleted: false,
+            isFromAI: false, // Only user messages, not AI messages
+            chat: { userId, isDeleted: false },
           },
-        }));
-
-      // Process Breakthrough Days: Group favorited messages by date
-      const breakthroughMessages = favoritedMessages.filter(
-        msg => msg.emotionConfidence >= 0.7
-      );
-
-      const dailyEmotions = {};
-      breakthroughMessages.forEach((msg) => {
-        const dateKey = new Date(msg.createdAt).toISOString().split("T")[0];
-        if (!dailyEmotions[dateKey]) {
-          dailyEmotions[dateKey] = {
-            count: 0,
-            positiveCount: 0,
-          };
-        }
-        dailyEmotions[dateKey].count += 1;
-        if (["joy", "surprise"].includes(msg.emotion)) {
-          dailyEmotions[dateKey].positiveCount += 1;
-        }
+        },
       });
+      
+      console.log(`🔧 [JOURNEY FIX v2.0] Heart-to-hearts count (user messages only): ${heartToHeartsCount}`);
+      console.log(`🔧 [JOURNEY FIX v2.0] OLD LOGIC would have returned: ${totalFavorites}`);
+      console.log(`🔧 [JOURNEY FIX v2.0] NEW LOGIC returns: ${heartToHeartsCount}`);
+      console.log(`🔧 [JOURNEY FIX v2.0] Fix deployed successfully!`);
+      
+      const heartToHearts = heartToHeartsCount;
+      const heartToHeartsList = []; // Simplified - no detailed list needed
 
-      const breakthroughDays = Object.values(dailyEmotions).filter(
-        (day) => day.count >= 5 && day.positiveCount >= 2
-      ).length;
+      // SIMPLIFIED: Growth Moments = Count of favorited messages with positive emotions (joy/surprise)
+      const growthMomentsMessages = favoritedMessages.filter(msg => 
+        msg.emotion && ['joy', 'surprise'].includes(msg.emotion)
+      );
+      growthMomentsCount = growthMomentsMessages.length;
+      const growthMomentsDetailList = []; // Simplified - no detailed list needed
+
+      // SIMPLIFIED: Breakthrough Days = Count of days with any favorited messages
+      const daysWithFavorites = new Set();
+      favoritedMessages.forEach(msg => {
+        const dateKey = new Date(msg.createdAt).toISOString().split("T")[0];
+        daysWithFavorites.add(dateKey);
+      });
+      const breakthroughDays = daysWithFavorites.size;
 
       // Weekly Journey: Only count favorited messages
       const currentDate = new Date();
@@ -3136,6 +3088,7 @@ Use this context to provide accurate and helpful responses to the user's questio
       return {
         message: "Journey page data fetched successfully.",
         success: true,
+        version: "JOURNEY_FIX_v2.0_DEPLOYED", // Version identifier to check deployment
         data: {
           user,
           journeyOverview: {

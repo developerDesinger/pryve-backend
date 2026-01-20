@@ -4,6 +4,8 @@ const PromptChunkingService = require('./promptChunking.service');
 class SupabaseVectorService {
   static supabase = null;
   static tableName = 'prompt_chunks';
+  static vectorCache = new Map(); // Cache for vector search results
+  static CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache
 
   /**
    * Initialize Supabase client
@@ -356,11 +358,11 @@ class SupabaseVectorService {
     }
 
     try {
-      // Use Supabase RPC function for vector similarity search
+      // OPTIMIZATION: Use Supabase RPC function with optimized parameters
       const { data, error } = await this.supabase.rpc('match_prompt_chunks', {
         query_embedding: queryEmbedding,
         match_threshold: minSimilarity,
-        match_count: topK,
+        match_count: topK * 2, // Get 2x results for better filtering
         filter_active: onlyRecent,
         recent_limit: recentLimit,
       });
@@ -380,7 +382,7 @@ class SupabaseVectorService {
         );
       }
 
-      // Apply deterministic sorting and limit results
+      // OPTIMIZATION: Apply deterministic sorting and limit results
       const sorted = this.deterministicSort(results);
       return sorted.slice(0, topK);
     } catch (error) {
@@ -483,6 +485,14 @@ class SupabaseVectorService {
       return null;
     }
 
+    // OPTIMIZATION: Check cache first
+    const cacheKey = `${userQuery.substring(0, 100)}_${topK}_${minSimilarity}_${promptSource || 'default'}`;
+    const cached = this.vectorCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
+      console.log('✅ Vector search result from cache');
+      return cached.context;
+    }
+
     try {
       console.log('\n' + '🔍'.repeat(40));
       console.log('🔍 VECTOR DB QUERY - Starting chunk retrieval...');
@@ -543,8 +553,12 @@ class SupabaseVectorService {
         console.log('-'.repeat(60));
       }
 
-      // Update usage tracking for retrieved chunks
-      await this.updateChunkUsage(chunks.map(chunk => chunk.id));
+      // Update usage tracking for retrieved chunks (non-blocking)
+      setImmediate(() => {
+        this.updateChunkUsage(chunks.map(chunk => chunk.id)).catch(err => {
+          console.error('Error updating chunk usage (non-critical):', err);
+        });
+      });
 
       // Combine chunks into context
       const context = chunks
@@ -553,6 +567,22 @@ class SupabaseVectorService {
 
       console.log(`\n📊 Total context length: ${context.length} characters`);
       console.log('🔍'.repeat(40) + '\n');
+
+      // OPTIMIZATION: Cache the result
+      this.vectorCache.set(cacheKey, {
+        context,
+        timestamp: Date.now()
+      });
+
+      // OPTIMIZATION: Clean old cache entries
+      if (this.vectorCache.size > 100) {
+        const now = Date.now();
+        for (const [key, value] of this.vectorCache.entries()) {
+          if (now - value.timestamp > this.CACHE_TTL) {
+            this.vectorCache.delete(key);
+          }
+        }
+      }
 
       return context;
     } catch (error) {
