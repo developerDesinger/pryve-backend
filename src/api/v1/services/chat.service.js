@@ -2569,7 +2569,7 @@ Use this context to provide accurate and helpful responses to the user's questio
     const chatLimit = parseInt(query.chatLimit) || 5;
     const messageLimit = parseInt(query.messageLimit) || 10;
     const vaultLimit = parseInt(query.vaultLimit) || 20;
-
+console.log("this is me@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
     try {
       // Get user data
       const user = await prisma.user.findUnique({
@@ -2672,8 +2672,8 @@ Use this context to provide accurate and helpful responses to the user's questio
           userId,
           message: {
             isDeleted: false,
-            isFromAI: false,
-            emotion: { not: null },
+            //isFromAI: false,
+           // emotion: { not: null },
             chat: { userId, isDeleted: false },
           },
         },
