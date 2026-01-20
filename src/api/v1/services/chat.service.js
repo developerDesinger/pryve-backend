@@ -2702,9 +2702,19 @@ Use this context to provide accurate and helpful responses to the user's questio
       );
       const goalsAchieved = derivedGoals.length;
 
-      // SIMPLIFIED LOGIC: Heart to Hearts = Total count of favorited messages
-      // When user favorites a message, it directly adds to heart-to-hearts count
-      const heartToHearts = totalFavorites; // Simply use the total favorites count
+      // FIXED: Heart to Hearts = Count of favorited user messages (not AI messages)
+      // This should match the logic in getJourneyMessages for heart-to-hearts category
+      const heartToHeartsCount = await prisma.userMessageFavorite.count({
+        where: {
+          userId,
+          message: {
+            isDeleted: false,
+            isFromAI: false, // Only user messages, not AI messages
+            chat: { userId, isDeleted: false },
+          },
+        },
+      });
+      const heartToHearts = heartToHeartsCount;
       const heartToHeartsList = []; // Simplified - no detailed list needed
 
       // SIMPLIFIED: Growth Moments = Count of favorited messages with positive emotions (joy/surprise)
