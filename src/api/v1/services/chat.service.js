@@ -2724,14 +2724,64 @@ console.log("this is me@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
       console.log(`🔧 [JOURNEY FIX v2.0] Fix deployed successfully!`);
       
       const heartToHearts = heartToHeartsCount;
-      const heartToHeartsList = []; // Simplified - no detailed list needed
+      
+      // Get heart-to-hearts items for the overview
+      console.log(`🔧 [JOURNEY FIX v2.1] Fetching heart-to-hearts items...`);
+      const heartToHeartsItems = await prisma.userMessageFavorite.findMany({
+        where: {
+          userId,
+          message: {
+            isDeleted: false,
+            isFromAI: false, // Only user messages, not AI messages
+            chat: { userId, isDeleted: false },
+          },
+        },
+        include: {
+          message: {
+            include: {
+              chat: { select: { id: true, name: true, type: true } },
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 5, // Limit to 5 items for overview
+      });
+      
+      console.log(`🔧 [JOURNEY FIX v2.1] Found ${heartToHeartsItems.length} heart-to-hearts items`);
+      
+      const heartToHeartsList = heartToHeartsItems.map(fav => ({
+        chatId: fav.message.chat.id,
+        chatName: fav.message.chat.name,
+        chatType: fav.message.chat.type,
+        emotionalMessageCount: 1, // Each favorite is one message
+        lastUpdatedAt: fav.message.createdAt,
+      }));
+      
+      console.log(`🔧 [JOURNEY FIX v2.1] Heart-to-hearts list created with ${heartToHeartsList.length} items`);
 
       // SIMPLIFIED: Growth Moments = Count of favorited messages with positive emotions (joy/surprise)
       const growthMomentsMessages = favoritedMessages.filter(msg => 
         msg.emotion && ['joy', 'surprise'].includes(msg.emotion)
       );
       growthMomentsCount = growthMomentsMessages.length;
-      const growthMomentsDetailList = []; // Simplified - no detailed list needed
+      
+      console.log(`🔧 [JOURNEY FIX v2.1] Growth moments messages found: ${growthMomentsMessages.length}`);
+      
+      // Populate growth moments items for overview
+      const growthMomentsDetailList = growthMomentsMessages.slice(0, 6).map(msg => ({
+        id: msg.id,
+        content: msg.content,
+        emotion: msg.emotion,
+        emotionConfidence: msg.emotionConfidence,
+        createdAt: msg.createdAt,
+        chat: {
+          id: msg.chat.id,
+          name: msg.chat.name,
+          type: msg.chat.type,
+        },
+      }));
+      
+      console.log(`🔧 [JOURNEY FIX v2.1] Growth moments detail list created with ${growthMomentsDetailList.length} items`);
 
       // SIMPLIFIED: Breakthrough Days = Count of days with any favorited messages
       const daysWithFavorites = new Set();
@@ -3088,7 +3138,7 @@ console.log("this is me@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
       return {
         message: "Journey page data fetched successfully.",
         success: true,
-        version: "JOURNEY_FIX_v2.0_DEPLOYED", // Version identifier to check deployment
+        version: "JOURNEY_FIX_v2.1_ITEMS_POPULATED", // Version identifier to check deployment
         data: {
           user,
           journeyOverview: {
