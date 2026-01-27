@@ -283,6 +283,21 @@ class ChatService {
     // ENHANCEMENT: Add emotional rules to the system prompt
     const basePrompt = resolvedSystemPrompt || "You are a helpful AI assistant.";
     const finalSystemPrompt = await EmotionalPromptService.buildEnhancedSystemPrompt(basePrompt);
+
+    // CONSOLE LOGGING: Show guidelines and full prompt being used (CHAT CREATION)
+    console.log("\n" + "=".repeat(80));
+    console.log("🔍 CHAT CREATION - GUIDELINES & PROMPT LOGGING");
+    console.log("=".repeat(80));
+    console.log("📋 BASE SYSTEM PROMPT:", basePrompt);
+    console.log("\n📋 FINAL SYSTEM PROMPT WITH GUIDELINES:");
+    console.log("-".repeat(60));
+    console.log(finalSystemPrompt);
+    console.log("-".repeat(60));
+    console.log("📊 PROMPT STATS:");
+    console.log(`- Base Prompt Length: ${basePrompt?.length || 0} characters`);
+    console.log(`- Final Prompt Length: ${finalSystemPrompt?.length || 0} characters`);
+    console.log(`- Guidelines Added: ${(finalSystemPrompt?.length || 0) - (basePrompt?.length || 0)} characters`);
+    console.log("=".repeat(80) + "\n");
     
     const chat = await prisma.chat.create({
       data: {
@@ -717,6 +732,22 @@ Use this context to provide accurate and helpful responses to the user's questio
         optimizedPrompt, 
         content
       );
+
+      // CONSOLE LOGGING: Show guidelines and full prompt being used
+      console.log("\n" + "=".repeat(80));
+      console.log("🔍 CHAT ENDPOINT - GUIDELINES & PROMPT LOGGING");
+      console.log("=".repeat(80));
+      console.log("📋 USER MESSAGE:", content);
+      console.log("📋 BASE SYSTEM PROMPT:", optimizedPrompt);
+      console.log("\n📋 ENHANCED PROMPT WITH GUIDELINES:");
+      console.log("-".repeat(60));
+      console.log(enhancedPrompt);
+      console.log("-".repeat(60));
+      console.log("📊 PROMPT STATS:");
+      console.log(`- Base Prompt Length: ${optimizedPrompt?.length || 0} characters`);
+      console.log(`- Enhanced Prompt Length: ${enhancedPrompt?.length || 0} characters`);
+      console.log(`- Guidelines Added: ${(enhancedPrompt?.length || 0) - (optimizedPrompt?.length || 0)} characters`);
+      console.log("=".repeat(80) + "\n");
       
       console.log(`🚀 PROMPT OPTIMIZATION: ${optimizedPrompt.length} chars vs ${systemPromptToUse.length} chars (${((1 - optimizedPrompt.length / systemPromptToUse.length) * 100).toFixed(1)}% reduction)`);
       console.log(`🎭 EMOTIONAL RULES: Enhanced prompt length: ${enhancedPrompt.length} chars`);
@@ -1324,6 +1355,22 @@ Use this context to provide accurate and helpful responses to the user's questio
           optimizedPrompt, 
           content
         );
+
+        // CONSOLE LOGGING: Show guidelines and full prompt being used (STREAMING)
+        console.log("\n" + "=".repeat(80));
+        console.log("🔍 CHAT STREAMING ENDPOINT - GUIDELINES & PROMPT LOGGING");
+        console.log("=".repeat(80));
+        console.log("📋 USER MESSAGE:", content);
+        console.log("📋 BASE SYSTEM PROMPT:", optimizedPrompt);
+        console.log("\n📋 ENHANCED PROMPT WITH GUIDELINES:");
+        console.log("-".repeat(60));
+        console.log(enhancedPrompt);
+        console.log("-".repeat(60));
+        console.log("📊 PROMPT STATS:");
+        console.log(`- Base Prompt Length: ${optimizedPrompt?.length || 0} characters`);
+        console.log(`- Enhanced Prompt Length: ${enhancedPrompt?.length || 0} characters`);
+        console.log(`- Guidelines Added: ${(enhancedPrompt?.length || 0) - (optimizedPrompt?.length || 0)} characters`);
+        console.log("=".repeat(80) + "\n");
         
         console.log(`🚀 STREAMING PROMPT OPTIMIZATION: ${optimizedPrompt.length} chars vs ${systemPromptToUse.length} chars`);
         console.log(`🎭 STREAMING EMOTIONAL RULES: Enhanced prompt length: ${enhancedPrompt.length} chars`);
