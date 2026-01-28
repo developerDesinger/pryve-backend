@@ -1097,7 +1097,10 @@ Use this context to provide accurate and helpful responses to the user's questio
 
             // AUTO-FAVORITE: Automatically add emotional messages to favorites
             // This ensures journey states (heart-to-hearts, growth moments, etc.) update properly
-            if (emotionResult.emotion && emotionResult.confidence >= 0.5) {
+            // FIXED: Exclude neutral emotions from auto-favoriting
+            if (emotionResult.emotion && 
+                emotionResult.emotion !== 'neutral' && 
+                emotionResult.confidence >= 0.5) {
               try {
                 // Check if already favorited to avoid duplicates
                 const existingFavorite = await prisma.userMessageFavorite.findUnique({
@@ -1123,6 +1126,10 @@ Use this context to provide accurate and helpful responses to the user's questio
               } catch (favoriteError) {
                 console.error("Failed to auto-favorite emotional message:", favoriteError);
               }
+            } else if (emotionResult.emotion === 'neutral') {
+              console.log(
+                `Skipping auto-favorite for neutral message ${userMessage.id} (emotion: ${emotionResult.emotion}, confidence: ${emotionResult.confidence})`
+              );
             }
           } catch (error) {
             console.error("Failed to update message with emotion:", error);
@@ -2428,7 +2435,7 @@ Use this context to provide accurate and helpful responses to the user's questio
     }
 
     if (normalized === "heart-to-hearts") {
-      // SIMPLE: If message is favorited, it appears in heart-to-hearts
+      // FIXED: Only include favorited messages with non-neutral emotions
       const favorites = await prisma.userMessageFavorite.findMany({
         where: {
           userId,
@@ -2436,6 +2443,16 @@ Use this context to provide accurate and helpful responses to the user's questio
             isDeleted: false,
             isFromAI: false,
             chat: { userId, isDeleted: false },
+            // Exclude neutral emotions from heart-to-hearts
+            OR: [
+              { emotion: null }, // Messages without emotion analysis
+              { 
+                AND: [
+                  { emotion: { not: null } },
+                  { emotion: { not: "neutral" } }
+                ]
+              }
+            ]
           },
         },
         include: {
@@ -2479,14 +2496,17 @@ Use this context to provide accurate and helpful responses to the user's questio
     }
 
     if (normalized === "breakthrough-days") {
-      // SIMPLE: Favorited messages with strong emotions, grouped by day
+      // FIXED: Favorited messages with strong non-neutral emotions, grouped by day
       const favorites = await prisma.userMessageFavorite.findMany({
         where: {
           userId,
           message: {
             isDeleted: false,
             isFromAI: false,
-            emotion: { not: null },
+            emotion: { 
+              not: null,
+              not: "neutral" // Exclude neutral emotions
+            },
             chat: { userId, isDeleted: false },
           },
         },
@@ -2749,10 +2769,10 @@ console.log("this is me@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
       );
       const goalsAchieved = derivedGoals.length;
 
-      // FIXED: Heart to Hearts = Count of favorited user messages (not AI messages)
+      // FIXED: Heart to Hearts = Count of favorited user messages with non-neutral emotions
       // This should match the logic in getJourneyMessages for heart-to-hearts category
-      console.log(`🔧 [JOURNEY FIX v2.0] Calculating heart-to-hearts for user: ${userId}`);
-      console.log(`🔧 [JOURNEY FIX v2.0] Total favorites: ${totalFavorites}`);
+      console.log(`🔧 [JOURNEY FIX v3.0] Calculating heart-to-hearts for user: ${userId} (excluding neutral emotions)`);
+      console.log(`🔧 [JOURNEY FIX v3.0] Total favorites: ${totalFavorites}`);
       
       const heartToHeartsCount = await prisma.userMessageFavorite.count({
         where: {
@@ -2761,23 +2781,48 @@ console.log("this is me@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
             isDeleted: false,
             isFromAI: false, // Only user messages, not AI messages
             chat: { userId, isDeleted: false },
+            // Exclude neutral emotions from heart-to-hearts count
+            OR: [
+              { emotion: null }, // Messages without emotion analysis
+              { 
+                AND: [
+                  { emotion: { not: null } },
+                  { emotion: { not: "neutral" } }
+                ]
+              }
+            ]
           },
         },
       });
       
-      console.log(`🔧 [JOURNEY FIX v2.0] Heart-to-hearts count (user messages only): ${heartToHeartsCount}`);
-      console.log(`🔧 [JOURNEY FIX v2.0] OLD LOGIC would have returned: ${totalFavorites}`);
-      console.log(`🔧 [JOURNEY FIX v2.0] NEW LOGIC returns: ${heartToHeartsCount}`);
-      console.log(`🔧 [JOURNEY FIX v2.0] Fix deployed successfully!`);
+      console.log(`🔧 [JOURNEY FIX v3.0] Heart-to-hearts count (user messages, non-neutral emotions): ${heartToHeartsCount}`);
+      console.log(`🔧 [JOURNEY FIX v3.0] OLD LOGIC would have returned: ${totalFavorites}`);
+      console.log(`🔧 [JOURNEY FIX v3.0] NEW LOGIC returns: ${heartToHeartsCount}`);
+      console.log(`🔧 [JOURNEY FIX v3.0] Neutral emotion exclusion fix deployed!`);
       
       const heartToHearts = heartToHeartsCount;
       
-      // Get heart-to-hearts items for the overview
-      console.log(`🔧 [JOURNEY FIX v2.1] Fetching heart-to-hearts items...`);
+      // Get heart-to-hearts items for the overview (also exclude neutral emotions)
+      console.log(`🔧 [JOURNEY FIX v3.1] Fetching heart-to-hearts items (excluding neutral emotions)...`);
       const heartToHeartsItems = await prisma.userMessageFavorite.findMany({
         where: {
           userId,
           message: {
+            isDeleted: false,
+            isFromAI: false,
+            chat: { userId, isDeleted: false },
+            // Exclude neutral emotions from heart-to-hearts items
+            OR: [
+              { emotion: null }, // Messages without emotion analysis
+              { 
+                AND: [
+                  { emotion: { not: null } },
+                  { emotion: { not: "neutral" } }
+                ]
+              }
+            ]
+          },
+        },
             isDeleted: false,
             isFromAI: false, // Only user messages, not AI messages
             chat: { userId, isDeleted: false },
