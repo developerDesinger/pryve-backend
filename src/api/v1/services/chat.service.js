@@ -2809,7 +2809,7 @@ console.log("this is me@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
           userId,
           message: {
             isDeleted: false,
-            isFromAI: false,
+            isFromAI: false, // Only user messages, not AI messages
             chat: { userId, isDeleted: false },
             // Exclude neutral emotions from heart-to-hearts items
             OR: [
@@ -2821,11 +2821,6 @@ console.log("this is me@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
                 ]
               }
             ]
-          },
-        },
-            isDeleted: false,
-            isFromAI: false, // Only user messages, not AI messages
-            chat: { userId, isDeleted: false },
           },
         },
         include: {
